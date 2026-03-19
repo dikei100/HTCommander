@@ -61,6 +61,7 @@ namespace HTCommander.Desktop
             broker.Subscribe(DataBroker.AllDevices, "Channels", OnChannelsChanged);
             broker.Subscribe(DataBroker.AllDevices, "BatteryAsPercentage", OnBatteryChanged);
             broker.Subscribe(DataBroker.AllDevices, "FriendlyName", OnFriendlyNameChanged);
+            broker.Subscribe(DataBroker.AllDevices, "AudioState", OnAudioStateChanged);
 
             broker.LogInfo("HTCommander Desktop (Avalonia) started. Ready to connect.");
         }
@@ -514,9 +515,19 @@ namespace HTCommander.Desktop
         private void MenuAudioEnabled_Click(object sender, RoutedEventArgs e)
         {
             if (activeDeviceId < 0) return;
-            bool currently = DataBroker.GetValue<bool>(activeDeviceId, "AudioState", false);
+            bool currently = AudioEnabledCheck.IsChecked == true;
             DataBroker.Dispatch(activeDeviceId, "SetAudio", !currently, store: false);
-            AudioEnabledCheck.IsChecked = !currently;
+            // Checkbox will be updated by OnAudioStateChanged event
+        }
+
+        private void OnAudioStateChanged(int deviceId, string name, object data)
+        {
+            if (deviceId != activeDeviceId && activeDeviceId >= 0) return;
+            Dispatcher.UIThread.Post(() =>
+            {
+                bool enabled = data is bool b && b;
+                AudioEnabledCheck.IsChecked = enabled;
+            });
         }
 
         private async void MenuAudioControls_Click(object sender, RoutedEventArgs e)

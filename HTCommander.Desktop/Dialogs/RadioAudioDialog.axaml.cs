@@ -145,6 +145,12 @@ namespace HTCommander.Desktop.Dialogs
             DataBroker.Dispatch(deviceId, "SetMute", MuteCheck.IsChecked == true, store: false);
         }
 
+        private void OkButton_Click(object sender, RoutedEventArgs e)
+        {
+            // All settings are dispatched live as sliders move, so just close
+            Close();
+        }
+
         private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
 
         #endregion
