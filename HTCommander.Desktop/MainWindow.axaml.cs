@@ -515,9 +515,9 @@ namespace HTCommander.Desktop
         private void MenuAudioEnabled_Click(object sender, RoutedEventArgs e)
         {
             if (activeDeviceId < 0) return;
-            bool currently = AudioEnabledCheck.IsChecked == true;
-            DataBroker.Dispatch(activeDeviceId, "SetAudio", !currently, store: false);
-            // Checkbox will be updated by OnAudioStateChanged event
+            bool newState = !(AudioEnabledCheck.IsChecked == true);
+            AudioEnabledCheck.IsChecked = newState;
+            DataBroker.Dispatch(activeDeviceId, "SetAudio", newState, store: false);
         }
 
         private void OnAudioStateChanged(int deviceId, string name, object data)

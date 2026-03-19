@@ -112,6 +112,7 @@ namespace HTCommander.Desktop.Dialogs
         {
             bool enable = AudioEnabledCheck.IsChecked == true;
             DataBroker.Dispatch(deviceId, "SetAudio", enable, store: false);
+            DataBroker.Dispatch(deviceId, "AudioState", enable, store: true);
             AudioStatusText.Text = enable ? "Audio streaming is active" : "Audio streaming is off";
         }
 
@@ -143,12 +144,6 @@ namespace HTCommander.Desktop.Dialogs
         private void Mute_Click(object sender, RoutedEventArgs e)
         {
             DataBroker.Dispatch(deviceId, "SetMute", MuteCheck.IsChecked == true, store: false);
-        }
-
-        private void OkButton_Click(object sender, RoutedEventArgs e)
-        {
-            // All settings are dispatched live as sliders move, so just close
-            Close();
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
