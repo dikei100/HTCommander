@@ -3,7 +3,7 @@
              xmlns:mapsui="clr-namespace:Mapsui.UI.Avalonia;assembly=Mapsui.UI.Avalonia"
              x:Class="HTCommander.Desktop.TabControls.MapTabControl">
     <DockPanel>
-        <Border DockPanel.Dock="Top" Background="Silver" Height="46" Padding="10,0">
+        <Border DockPanel.Dock="Top" Background="#2D2D30" Height="46" Padding="10,0">
             <Grid>
                 <TextBlock Text="Map" VerticalAlignment="Center"
                            FontSize="14" FontWeight="SemiBold" />

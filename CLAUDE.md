@@ -41,7 +41,7 @@ src/ (original WinForms) ────────────┘
 
 All radio protocol logic, data handlers, codecs, and parsers. Key subsystems:
 - **Radio.cs**: GAIA protocol over Bluetooth RFCOMM — the central class managing radio connections, commands, channels, GPS
-- **DataBroker / DataBrokerClient**: Global pub/sub event bus. Device-scoped data channels with optional persistence via `ISettingsStore`. Uses `SynchronizationContext.Post()` for UI thread marshalling (not WinForms `Control.BeginInvoke`)
+- **DataBroker / DataBrokerClient**: Global pub/sub event bus. Device-scoped data channels with optional persistence via `ISettingsStore`. Uses `SynchronizationContext.Post()` for UI thread marshalling
 - **Interfaces/**: Platform abstractions (`IPlatformServices`, `IRadioBluetooth`, `IAudioService`, `ISpeechService`, `ISettingsStore`, `IFilePickerService`, `IPlatformUtils`, `IRadioHost`, `IWhisperEngine`)
 - **radio/**: AX.25 packet protocol, SoftwareModem (DSP), GAIA frame encode/decode
 - **SSTV/**: Slow-scan TV image encode/decode using SkiaSharp (not System.Drawing)
@@ -51,15 +51,15 @@ All radio protocol logic, data handlers, codecs, and parsers. Key subsystems:
 
 **Platform.Windows** (net9.0-windows): WinRT Bluetooth, NAudio/WASAPI audio, System.Speech TTS, Windows Registry settings
 
-**Platform.Linux** (net9.0): BlueZ D-Bus Bluetooth (ProfileManager1 API with native RFCOMM sockets), PortAudio audio, espeak-ng TTS, JSON file settings at `~/.config/HTCommander/`
+**Platform.Linux** (net9.0): Direct native RFCOMM sockets for Bluetooth, BlueZ D-Bus for device discovery/ACL, PortAudio audio, espeak-ng TTS, JSON file settings at `~/.config/HTCommander/`
 
 ### HTCommander.Desktop (net9.0) — Avalonia UI
 
-10 tab controls + 39 dialogs + Mapsui map. Platform auto-detected at startup via reflection in `Program.cs`. Conditional project references load Windows or Linux platform assembly.
+10 tab controls + 39 dialogs + Mapsui map + left-side radio info panel. Platform auto-detected at startup via reflection in `Program.cs`. Conditional project references load Windows or Linux platform assembly. Radio info panel shows VFO A/B frequencies, RSSI, battery, GPS, channels.
 
 ### src/ (net9.0-windows) — Original WinForms app
 
-Still builds and runs on Windows. References Core. Files moved to Core are excluded via `<Compile Remove>` in the csproj. Contains Windows-only code: RadioAudio.cs (NAudio+WinRT), Microphone.cs, WhisperEngine.cs, AirplaneMarker.cs (GMap.NET), and WinForms UI (Dialogs/, TabControls/, Controls/).
+Still builds and runs on Windows. References Core. Files moved to Core are excluded via `<Compile Remove>` in the csproj. Contains Windows-only code: RadioAudio.cs (NAudio+WinRT), Microphone.cs, WhisperEngine.cs, AirplaneMarker.cs (GMap.NET), and WinForms UI.
 
 ## Key Patterns
 
@@ -76,8 +76,23 @@ Components communicate via `DataBroker.Dispatch(deviceId, name, data)` and `brok
 ### IRadioHost interface
 Breaks circular dependency: platform BT transports need `Radio.Debug()` and `Radio.Disconnect()` but can't reference Radio directly. `IRadioHost` in Core defines `MacAddress`, `Debug(string)`, `Disconnect(string, RadioState)`. Radio implements it.
 
-### Linux Bluetooth (BlueZ ProfileManager1)
-Registers SPP profile via D-Bus → calls `ConnectProfile(SPP_UUID)` → receives fd in `NewConnection` callback → **must `dup()` the fd** before callback returns (Tmds.DBus closes the original) → uses native `read()`/`write()` P/Invoke. Known issue: fd obtained and validated but radio not responding to GAIA commands.
+### Linux Bluetooth (direct RFCOMM sockets)
+Connection flow: BlueZ D-Bus for ACL connect + device discovery → SDP channel discovery via `sdptool` (fallback: probe channels 1-30) → native RFCOMM socket per candidate channel → **GAIA verification**: send GET_DEV_ID, accept only channels responding with valid `FF 01` header → non-blocking read loop.
+
+**Critical**: `poll()` and `SO_RCVTIMEO` do NOT work on RFCOMM sockets (kernel/BlueZ bug). The read loop must use `O_NONBLOCK` + `Thread.Sleep(50)` instead. The `VerifyGaiaResponse` step uses `poll()` for a single check and works; the issue only manifests in sustained read loops.
+
+**Critical**: `OnConnected` must fire on a background thread (`ThreadPool.QueueUserWorkItem`) so Radio's ~35 initialization commands don't block the read loop. Without concurrent reads, RFCOMM flow control stalls.
+
+RFCOMM channel numbers vary by radio model and even between connections (VR-N76 uses channel 1 or 4 for commands, channel 2 for audio). Never hardcode channels.
+
+### GAIA protocol frame format
+```
+[0xFF] [0x01] [flags] [body_length] [group_hi] [group_lo] [cmd_hi] [cmd_lo] [body...]
+```
+- `body_length` = cmd body only (excludes 4-byte command header)
+- Total frame = body_length + 8
+- Reply bit: `cmd_hi | 0x80`
+- Radio frequency values stored in Hz (divide by 1,000,000 for MHz display)
 
 ## Code Conventions
 
@@ -90,6 +105,7 @@ Registers SPP profile via D-Bus → calls `ConnectProfile(SPP_UUID)` → receive
 - `Utils` is a **partial class** — cross-platform methods in Core, WinForms-specific (SetDoubleBuffered, SendMessage) in src/
 - Avalonia dialogs use `Confirmed` bool property pattern for OK/Cancel results
 - SSTV imaging uses SkiaSharp (`SKBitmap`), not System.Drawing. WinForms bridge: `SkiaBitmapConverter`
+- Avalonia Desktop uses dark theme — UI elements should use dark backgrounds with light text
 
 ## Repository Structure
 
@@ -98,3 +114,8 @@ Registers SPP profile via D-Bus → calls `ConnectProfile(SPP_UUID)` → receive
 - `HTCommander.setup/` — Windows MSI installer project
 - Two git remotes: `origin` (Ylianst/HTCommander upstream), `fork` (dikei100/HTCommander)
 - Active branch: `cross-platform`
+
+## Related Projects
+
+- [khusmann/benlink](https://github.com/khusmann/benlink) — Python library for the same radios; reference for GAIA protocol, RFCOMM channel discovery, and audio codec details
+- [SarahRoseLives/flutter_benlink](https://github.com/SarahRoseLives/flutter_benlink) — Flutter/Dart implementation; reference for initialization sequence and VR-N76 quirks (SYNC_SETTINGS handshake)

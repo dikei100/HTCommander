@@ -92,23 +92,33 @@ namespace HTCommander.Desktop
                 {
                     case "Connected":
                         StatusText.Text = $"Radio {deviceId}: Connected";
+                        StatusBarText.Text = $"Connected to radio {deviceId}";
                         ConnectButton.IsEnabled = true;
                         DisconnectButton.IsEnabled = true;
+                        MenuDisconnect.IsEnabled = true;
+                        MenuRadioInfo.IsEnabled = true;
+                        MenuExportChannels.IsEnabled = true;
                         activeDeviceId = deviceId;
-                        RadioPanel.IsVisible = true;
+                        if (RadioPanelCheck.IsChecked == true) RadioPanel.IsVisible = true;
                         RadioStateText.Text = "Connected";
                         RadioStateText.Foreground = new SolidColorBrush(Color.Parse("#4CAF50"));
                         break;
                     case "Connecting":
                         StatusText.Text = $"Radio {deviceId}: Connecting...";
-                        RadioPanel.IsVisible = true;
+                        StatusBarText.Text = $"Connecting to radio {deviceId}...";
+                        RadioPanel.IsVisible = RadioPanelCheck.IsChecked == true;
                         RadioStateText.Text = "Connecting...";
                         RadioStateText.Foreground = new SolidColorBrush(Color.Parse("#FFC107"));
                         break;
                     case "Disconnected":
                         StatusText.Text = connectedRadios.Count > 0 ? $"Radio {deviceId}: Disconnected" : "Not connected";
+                        StatusBarText.Text = "Ready";
                         ConnectButton.IsEnabled = true;
                         DisconnectButton.IsEnabled = false;
+                        MenuDisconnect.IsEnabled = false;
+                        MenuRadioInfo.IsEnabled = false;
+                        MenuExportChannels.IsEnabled = false;
+                        BatteryStatusText.Text = "";
                         if (deviceId == activeDeviceId)
                         {
                             activeDeviceId = -1;
@@ -120,12 +130,14 @@ namespace HTCommander.Desktop
                         break;
                     case "UnableToConnect":
                         StatusText.Text = $"Radio {deviceId}: Unable to connect";
+                        StatusBarText.Text = "Connection failed";
                         ConnectButton.IsEnabled = true;
                         RadioPanel.IsVisible = false;
                         ShowCantConnectDialog();
                         break;
                     case "BluetoothNotAvailable":
                         StatusText.Text = "Bluetooth not available";
+                        StatusBarText.Text = "Bluetooth not available";
                         ConnectButton.IsEnabled = true;
                         RadioPanel.IsVisible = false;
                         ShowBluetoothActivateDialog();
@@ -158,6 +170,8 @@ namespace HTCommander.Desktop
             Dispatcher.UIThread.Post(() =>
             {
                 RssiBar.Value = status.rssi;
+                int filled = Math.Min(status.rssi / 2, 8);
+                ScreenRssiText.Text = "S " + new string('▮', filled) + new string('▯', 8 - filled);
                 TxIndicatorFill.Background = status.is_in_tx ? Brushes.Red : new SolidColorBrush(Color.Parse("#333"));
                 GpsText.Text = status.is_gps_locked ? "Locked" : "No fix";
                 GpsText.Foreground = status.is_gps_locked ? Brushes.LimeGreen : new SolidColorBrush(Color.Parse("#E0E0E0"));
@@ -203,10 +217,14 @@ namespace HTCommander.Desktop
             if (deviceId != activeDeviceId && activeDeviceId >= 0) return;
             Dispatcher.UIThread.Post(() =>
             {
+                string battStr;
                 if (data is int pct)
-                    BatteryText.Text = $"{pct}%";
+                    battStr = $"{pct}%";
                 else
-                    BatteryText.Text = data?.ToString() ?? "--%";
+                    battStr = data?.ToString() ?? "--%";
+
+                BatteryText.Text = battStr;
+                BatteryStatusText.Text = $"Battery: {battStr}";
             });
         }
 
@@ -232,6 +250,17 @@ namespace HTCommander.Desktop
 
             VfoBName.Text = infoB != null && !string.IsNullOrEmpty(infoB.name_str) ? infoB.name_str : $"CH {chB + 1}";
             VfoBFreq.Text = infoB != null ? FormatFrequency(infoB.rx_freq) : "--- .--- MHz";
+
+            // Update the radio screen overlay
+            ScreenVfoA.Text = infoA != null ? FormatFrequencyShort(infoA.rx_freq) : "----.---";
+            ScreenVfoB.Text = infoB != null ? FormatFrequencyShort(infoB.rx_freq) : "----.---";
+        }
+
+        private static string FormatFrequencyShort(int freq)
+        {
+            if (freq <= 0) return "----.---";
+            double mhz = freq / 1000000.0;
+            return $"{mhz:F3}";
         }
 
         private void UpdateChannelList()
@@ -418,6 +447,47 @@ namespace HTCommander.Desktop
         private async void ShowCantConnectDialog()
         {
             var dialog = new CantConnectDialog();
+            await dialog.ShowDialog(this);
+        }
+
+        private async void MenuSettings_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new SettingsDialog();
+            await dialog.ShowDialog(this);
+        }
+
+        private void MenuExit_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
+
+        private void MenuExportChannels_Click(object sender, RoutedEventArgs e)
+        {
+            // TODO: Export channels
+        }
+
+        private void MenuImportChannels_Click(object sender, RoutedEventArgs e)
+        {
+            // TODO: Import channels
+        }
+
+        private void MenuRadioPanel_Click(object sender, RoutedEventArgs e)
+        {
+            bool show = !RadioPanel.IsVisible;
+            RadioPanelCheck.IsChecked = show;
+            if (activeDeviceId >= 0) RadioPanel.IsVisible = show;
+        }
+
+        private async void MenuRadioInfo_Click(object sender, RoutedEventArgs e)
+        {
+            if (activeDeviceId < 0) return;
+            var dialog = new RadioInfoDialog(activeDeviceId);
+            await dialog.ShowDialog(this);
+        }
+
+        private async void MenuAbout_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new AboutDialog();
             await dialog.ShowDialog(this);
         }
 

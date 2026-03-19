@@ -6,101 +6,182 @@
         Width="1200" Height="800"
         MinWidth="600" MinHeight="400">
     <DockPanel>
+        <!-- Menu bar -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Name="MenuConnect" Header="_Connect..." Click="ConnectButton_Click" />
+                <MenuItem Name="MenuDisconnect" Header="_Disconnect" Click="DisconnectButton_Click" IsEnabled="False" />
+                <Separator />
+                <MenuItem Name="MenuSettings" Header="_Settings..." Click="MenuSettings_Click" />
+                <Separator />
+                <MenuItem Header="E_xit" Click="MenuExit_Click" />
+            </MenuItem>
+            <MenuItem Header="_Settings">
+                <MenuItem Name="MenuExportChannels" Header="_Export Channels..." Click="MenuExportChannels_Click" IsEnabled="False" />
+                <MenuItem Name="MenuImportChannels" Header="_Import Channels..." Click="MenuImportChannels_Click" />
+            </MenuItem>
+            <MenuItem Header="_View">
+                <MenuItem Name="MenuRadioPanel" Header="_Radio Panel" Click="MenuRadioPanel_Click">
+                    <MenuItem.Icon>
+                        <CheckBox Name="RadioPanelCheck" IsChecked="True" BorderThickness="0" IsHitTestVisible="False" />
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="_About">
+                <MenuItem Name="MenuRadioInfo" Header="Radio _Information..." Click="MenuRadioInfo_Click" IsEnabled="False" />
+                <Separator />
+                <MenuItem Header="_About HTCommander..." Click="MenuAbout_Click" />
+            </MenuItem>
+        </Menu>
+
         <!-- Top toolbar -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8" Spacing="8">
-            <Button Name="ConnectButton" Content="Connect Radio" Click="ConnectButton_Click" />
-            <Button Name="DisconnectButton" Content="Disconnect" Click="DisconnectButton_Click" IsEnabled="False" />
-            <TextBlock Name="StatusText" VerticalAlignment="Center" Text="Not connected" Margin="16,0,0,0" />
-        </StackPanel>
+        <Border DockPanel.Dock="Top" Background="#2D2D30" Padding="8,4">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Name="ConnectButton" Content="Connect Radio" Click="ConnectButton_Click" />
+                <Button Name="DisconnectButton" Content="Disconnect" Click="DisconnectButton_Click" IsEnabled="False" />
+                <TextBlock Name="StatusText" VerticalAlignment="Center" Text="Not connected" Margin="16,0,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="#007ACC" Padding="8,3">
+            <Grid>
+                <TextBlock Name="StatusBarText" Text="Ready" Foreground="White" FontSize="12" />
+                <TextBlock Name="BatteryStatusText" Text="" Foreground="White" FontSize="12"
+                           HorizontalAlignment="Right" />
+            </Grid>
+        </Border>
 
         <!-- Left radio info panel -->
-        <Border Name="RadioPanel" DockPanel.Dock="Left" Width="260" IsVisible="False"
-                BorderBrush="#555" BorderThickness="0,0,1,0" Background="#1A1A2E" Padding="8">
+        <Border Name="RadioPanel" DockPanel.Dock="Left" Width="300" IsVisible="False"
+                BorderBrush="#3F3F46" BorderThickness="0,0,1,0" Background="#1E1E1E">
             <ScrollViewer>
-                <StackPanel Spacing="8">
-                    <!-- Radio name and model -->
-                    <TextBlock Name="RadioNameText" Text="VR-N76" FontSize="16" FontWeight="Bold"
-                               Foreground="White" HorizontalAlignment="Center" />
-                    <TextBlock Name="RadioStateText" Text="Connected" FontSize="12"
-                               Foreground="#4CAF50" HorizontalAlignment="Center" />
-
-                    <Separator Background="#444" Margin="0,4" />
-
-                    <!-- VFO A -->
-                    <Border Background="#0D1B2A" CornerRadius="4" Padding="8">
-                        <StackPanel>
-                            <TextBlock Text="VFO A" FontSize="11" Foreground="#888" />
-                            <TextBlock Name="VfoAName" Text="--" FontSize="13" Foreground="#64B5F6" FontWeight="SemiBold" />
-                            <TextBlock Name="VfoAFreq" Text="--- .--- MHz" FontSize="20" Foreground="#E0E0E0"
-                                       FontFamily="Consolas,Liberation Mono,monospace" FontWeight="Bold" />
-                        </StackPanel>
-                    </Border>
-
-                    <!-- VFO B -->
-                    <Border Background="#0D1B2A" CornerRadius="4" Padding="8">
-                        <StackPanel>
-                            <TextBlock Text="VFO B" FontSize="11" Foreground="#888" />
-                            <TextBlock Name="VfoBName" Text="--" FontSize="13" Foreground="#64B5F6" FontWeight="SemiBold" />
-                            <TextBlock Name="VfoBFreq" Text="--- .--- MHz" FontSize="20" Foreground="#E0E0E0"
-                                       FontFamily="Consolas,Liberation Mono,monospace" FontWeight="Bold" />
-                        </StackPanel>
-                    </Border>
-
-                    <Separator Background="#444" Margin="0,4" />
-
-                    <!-- Signal / TX / Status indicators -->
-                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" Margin="0,2">
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="RSSI" Foreground="#888" FontSize="12" Margin="0,2" />
-                        <ProgressBar Name="RssiBar" Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="16"
-                                     Value="0" Height="14" Margin="8,2,0,2" Foreground="#4CAF50" Background="#333" />
-
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="TX" Foreground="#888" FontSize="12" Margin="0,2" />
-                        <Border Name="TxIndicator" Grid.Row="1" Grid.Column="1" Height="14" Margin="8,2,0,2"
-                                Background="#333" CornerRadius="2">
-                            <Border Name="TxIndicatorFill" Background="#333" CornerRadius="2" HorizontalAlignment="Stretch" />
+                <StackPanel>
+                    <!-- Radio image with overlaid display -->
+                    <Grid HorizontalAlignment="Center" Margin="0,8,0,0">
+                        <Image Source="avares://HTCommander.Desktop/Assets/images/Radio.png"
+                               Width="220" Stretch="Uniform" />
+                        <!-- Overlay: radio screen display area -->
+                        <Border Background="#1A2332" CornerRadius="2" Opacity="0.92"
+                                Width="137" Height="117" ClipToBounds="True"
+                                HorizontalAlignment="Center" VerticalAlignment="Top"
+                                Margin="6,118,0,0">
+                            <StackPanel Margin="4,2">
+                                <!-- Radio name -->
+                                <TextBlock Name="RadioNameText" Text="VR-N76" FontSize="12"
+                                           Foreground="#80CBC4" HorizontalAlignment="Center"
+                                           FontFamily="Consolas,Liberation Mono,monospace" />
+                                <!-- State -->
+                                <TextBlock Name="RadioStateText" Text="Disconnected" FontSize="10"
+                                           Foreground="#888" HorizontalAlignment="Center" Margin="0,0,0,1" />
+                                <!-- VFO A freq on screen -->
+                                <TextBlock Name="ScreenVfoA" Text="----.---"
+                                           FontSize="20" Foreground="#4FC3F7" FontWeight="Bold"
+                                           FontFamily="Consolas,Liberation Mono,monospace"
+                                           HorizontalAlignment="Center" />
+                                <!-- VFO B freq on screen -->
+                                <TextBlock Name="ScreenVfoB" Text="----.---"
+                                           FontSize="15" Foreground="#81C784"
+                                           FontFamily="Consolas,Liberation Mono,monospace"
+                                           HorizontalAlignment="Center" />
+                                <!-- Signal dots instead of progress bar -->
+                                <TextBlock Name="ScreenRssiText" Text="S ▮▮▮▯▯▯▯▯"
+                                           FontSize="10" Foreground="#4FC3F7"
+                                           FontFamily="Consolas,Liberation Mono,monospace"
+                                           HorizontalAlignment="Center" Margin="0,1,0,0" />
+                            </StackPanel>
                         </Border>
-
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Battery" Foreground="#888" FontSize="12" Margin="0,4" />
-                        <TextBlock Name="BatteryText" Grid.Row="2" Grid.Column="1" Text="--%" Foreground="#E0E0E0"
-                                   FontSize="12" Margin="8,4,0,4" />
-
-                        <TextBlock Grid.Row="3" Grid.Column="0" Text="GPS" Foreground="#888" FontSize="12" Margin="0,2" />
-                        <TextBlock Name="GpsText" Grid.Row="3" Grid.Column="1" Text="--" Foreground="#E0E0E0"
-                                   FontSize="12" Margin="8,2,0,2" />
-
-                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Squelch" Foreground="#888" FontSize="12" Margin="0,2" />
-                        <TextBlock Name="SquelchText" Grid.Row="4" Grid.Column="1" Text="--" Foreground="#E0E0E0"
-                                   FontSize="12" Margin="8,2,0,2" />
-
-                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Scan" Foreground="#888" FontSize="12" Margin="0,2" />
-                        <TextBlock Name="ScanText" Grid.Row="5" Grid.Column="1" Text="--" Foreground="#E0E0E0"
-                                   FontSize="12" Margin="8,2,0,2" />
-
-                        <TextBlock Grid.Row="6" Grid.Column="0" Text="Power" Foreground="#888" FontSize="12" Margin="0,2" />
-                        <TextBlock Name="PowerText" Grid.Row="6" Grid.Column="1" Text="--" Foreground="#E0E0E0"
-                                   FontSize="12" Margin="8,2,0,2" />
                     </Grid>
 
-                    <Separator Background="#444" Margin="0,4" />
+                    <!-- Info section below radio image -->
+                    <StackPanel Margin="12,8,12,12" Spacing="6">
 
-                    <!-- Channel list -->
-                    <TextBlock Text="Channels" FontSize="13" Foreground="#AAA" FontWeight="SemiBold" />
-                    <ItemsControl Name="ChannelList">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,1" Padding="6,3" CornerRadius="3"
-                                        Background="{Binding Background}">
-                                    <Grid ColumnDefinitions="24,*,Auto">
-                                        <TextBlock Grid.Column="0" Text="{Binding Id}" Foreground="#888" FontSize="11" VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="{Binding NameColor}" FontSize="12"
-                                                   FontWeight="SemiBold" VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="2" Text="{Binding Frequency}" Foreground="#B0B0B0" FontSize="11"
-                                                   FontFamily="Consolas,Liberation Mono,monospace" VerticalAlignment="Center" />
-                                    </Grid>
+                        <!-- VFO A detail -->
+                        <Border Background="#252526" CornerRadius="4" Padding="10,6" BorderBrush="#3F3F46" BorderThickness="1">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <TextBlock Text="A" FontSize="18" FontWeight="Bold" Foreground="#4FC3F7"
+                                           VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Name="VfoAName" Text="--" FontSize="12" Foreground="#4FC3F7" FontWeight="SemiBold" />
+                                    <TextBlock Name="VfoAFreq" Text="--- .--- MHz" FontSize="16" Foreground="#E0E0E0"
+                                               FontFamily="Consolas,Liberation Mono,monospace" FontWeight="Bold" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- VFO B detail -->
+                        <Border Background="#252526" CornerRadius="4" Padding="10,6" BorderBrush="#3F3F46" BorderThickness="1">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <TextBlock Text="B" FontSize="18" FontWeight="Bold" Foreground="#81C784"
+                                           VerticalAlignment="Center" Margin="0,0,10,0" />
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Name="VfoBName" Text="--" FontSize="12" Foreground="#81C784" FontWeight="SemiBold" />
+                                    <TextBlock Name="VfoBFreq" Text="--- .--- MHz" FontSize="16" Foreground="#E0E0E0"
+                                               FontFamily="Consolas,Liberation Mono,monospace" FontWeight="Bold" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- RSSI and TX bars -->
+                        <Border Background="#252526" CornerRadius="4" Padding="10,6" BorderBrush="#3F3F46" BorderThickness="1">
+                            <Grid ColumnDefinitions="50,*" RowDefinitions="Auto,Auto">
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="RSSI" Foreground="#888" FontSize="11" VerticalAlignment="Center" />
+                                <ProgressBar Name="RssiBar" Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="16"
+                                             Value="0" Height="12" Foreground="#4CAF50" Background="#333" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="TX" Foreground="#888" FontSize="11"
+                                           VerticalAlignment="Center" Margin="0,4,0,0" />
+                                <Border Name="TxIndicator" Grid.Row="1" Grid.Column="1" Height="12" Margin="0,4,0,0"
+                                        Background="#333" CornerRadius="2">
+                                    <Border Name="TxIndicatorFill" Background="#333" CornerRadius="2" HorizontalAlignment="Stretch" />
                                 </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                            </Grid>
+                        </Border>
+
+                        <!-- Status grid -->
+                        <Border Background="#252526" CornerRadius="4" Padding="10,6" BorderBrush="#3F3F46" BorderThickness="1">
+                            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" Margin="0">
+                                <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,2">
+                                    <TextBlock Text="Battery" Foreground="#888" FontSize="10" />
+                                    <TextBlock Name="BatteryText" Text="--%" Foreground="#E0E0E0" FontSize="13" FontWeight="SemiBold" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,2">
+                                    <TextBlock Text="GPS" Foreground="#888" FontSize="10" />
+                                    <TextBlock Name="GpsText" Text="--" Foreground="#E0E0E0" FontSize="13" FontWeight="SemiBold" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,2">
+                                    <TextBlock Text="Squelch" Foreground="#888" FontSize="10" />
+                                    <TextBlock Name="SquelchText" Text="--" Foreground="#E0E0E0" FontSize="13" FontWeight="SemiBold" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,2">
+                                    <TextBlock Text="Scan" Foreground="#888" FontSize="10" />
+                                    <TextBlock Name="ScanText" Text="--" Foreground="#E0E0E0" FontSize="13" FontWeight="SemiBold" />
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,2">
+                                    <TextBlock Text="Power" Foreground="#888" FontSize="10" />
+                                    <TextBlock Name="PowerText" Text="--" Foreground="#E0E0E0" FontSize="13" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
+                        <!-- Channel list -->
+                        <TextBlock Text="Channels" FontSize="12" Foreground="#888" FontWeight="SemiBold" Margin="0,4,0,2" />
+                        <ItemsControl Name="ChannelList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,1" Padding="6,3" CornerRadius="3"
+                                            Background="{Binding Background}">
+                                        <Grid ColumnDefinitions="22,*,Auto">
+                                            <TextBlock Grid.Column="0" Text="{Binding Id}" Foreground="#666" FontSize="10" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="{Binding NameColor}" FontSize="11"
+                                                       FontWeight="SemiBold" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Frequency}" Foreground="#888" FontSize="10"
+                                                       FontFamily="Consolas,Liberation Mono,monospace" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
         </Border>
