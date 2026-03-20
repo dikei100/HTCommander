@@ -20,7 +20,9 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libfuse2 imagemagick wget
+        run: |
+          sudo apt-get update && sudo apt-get install -y libfuse2 imagemagick wget rpm libarchive-tools zstd
+          sudo gem install fpm
 
       - name: Publish Linux x64
         run: |
@@ -112,6 +114,78 @@ jobs:
 
           dpkg-deb --build $DEBDIR "htcommander_${VERSION}_amd64.deb"
 
+      - name: Build .rpm (Fedora)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          # Prepare staging directory
+          RPMROOT=rpm-staging
+          mkdir -p $RPMROOT/opt/htcommander
+          mkdir -p $RPMROOT/usr/bin
+          mkdir -p $RPMROOT/usr/share/applications
+          mkdir -p $RPMROOT/usr/share/icons/hicolor/256x256/apps
+
+          cp -r publish/linux-x64/* $RPMROOT/opt/htcommander/
+          printf '#!/bin/bash\nexec /opt/htcommander/HTCommander.Desktop "$@"\n' > $RPMROOT/usr/bin/htcommander
+          chmod +x $RPMROOT/usr/bin/htcommander
+
+          cp packaging/linux/HTCommander.desktop $RPMROOT/usr/share/applications/
+          sed -i "s|Exec=HTCommander.Desktop|Exec=/opt/htcommander/HTCommander.Desktop|" \
+              $RPMROOT/usr/share/applications/HTCommander.desktop
+
+          if [ -f AppDir/usr/share/icons/hicolor/256x256/apps/htcommander.png ]; then
+            cp AppDir/usr/share/icons/hicolor/256x256/apps/htcommander.png \
+              $RPMROOT/usr/share/icons/hicolor/256x256/apps/
+          fi
+
+          fpm -s dir -t rpm \
+            -n htcommander \
+            -v "$VERSION" \
+            -a x86_64 \
+            --description "HTCommander-X - Cross-platform Ham Radio Commander" \
+            --url "https://github.com/dikei100/HTCommander-X" \
+            --license "Apache-2.0" \
+            --depends portaudio \
+            --depends bluez \
+            -C $RPMROOT \
+            -p "htcommander-${VERSION}-1.x86_64.rpm"
+
+      - name: Build .pkg.tar.zst (Arch)
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          # Prepare staging directory
+          ARCHROOT=arch-staging
+          mkdir -p $ARCHROOT/opt/htcommander
+          mkdir -p $ARCHROOT/usr/bin
+          mkdir -p $ARCHROOT/usr/share/applications
+          mkdir -p $ARCHROOT/usr/share/icons/hicolor/256x256/apps
+
+          cp -r publish/linux-x64/* $ARCHROOT/opt/htcommander/
+          printf '#!/bin/bash\nexec /opt/htcommander/HTCommander.Desktop "$@"\n' > $ARCHROOT/usr/bin/htcommander
+          chmod +x $ARCHROOT/usr/bin/htcommander
+
+          cp packaging/linux/HTCommander.desktop $ARCHROOT/usr/share/applications/
+          sed -i "s|Exec=HTCommander.Desktop|Exec=/opt/htcommander/HTCommander.Desktop|" \
+              $ARCHROOT/usr/share/applications/HTCommander.desktop
+
+          if [ -f AppDir/usr/share/icons/hicolor/256x256/apps/htcommander.png ]; then
+            cp AppDir/usr/share/icons/hicolor/256x256/apps/htcommander.png \
+              $ARCHROOT/usr/share/icons/hicolor/256x256/apps/
+          fi
+
+          fpm -s dir -t pacman \
+            -n htcommander \
+            -v "$VERSION" \
+            -a x86_64 \
+            --description "HTCommander-X - Cross-platform Ham Radio Commander" \
+            --url "https://github.com/dikei100/HTCommander-X" \
+            --license "Apache-2.0" \
+            --depends portaudio \
+            --depends bluez \
+            -C $ARCHROOT \
+            -p "htcommander-${VERSION}-1-x86_64.pkg.tar.zst"
+
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -119,6 +193,8 @@ jobs:
           path: |
             HTCommander-X-x86_64.AppImage
             htcommander_*.deb
+            htcommander-*.rpm
+            htcommander-*.pkg.tar.zst
 
   build-windows:
     runs-on: windows-latest
@@ -163,4 +239,6 @@ jobs:
           files: |
             linux-artifacts/HTCommander-X-x86_64.AppImage
             linux-artifacts/htcommander_*.deb
+            linux-artifacts/htcommander-*.rpm
+            linux-artifacts/htcommander-*.pkg.tar.zst
             windows-artifacts/HTCommander-X-win-x64.zip
