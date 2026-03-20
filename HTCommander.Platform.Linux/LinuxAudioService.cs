@@ -126,7 +126,7 @@ namespace HTCommander.Platform.Linux
                 device = PortAudioNative.Pa_GetDefaultOutputDevice(),
                 channelCount = _channels,
                 sampleFormat = (uint)(_bitsPerSample == 16 ? 0x00000008 : 0x00000001), // paInt16 or paFloat32
-                suggestedLatency = 0.2,
+                suggestedLatency = 0.1,
                 hostApiSpecificStreamInfo = IntPtr.Zero
             };
 
@@ -202,11 +202,11 @@ namespace HTCommander.Platform.Linux
 
     public class LinuxAudioInput : IAudioInput
     {
-        private IntPtr stream = IntPtr.Zero;
         private int _sampleRate;
         private int _bitsPerSample;
         private int _channels;
         private string _deviceId;
+        private System.Diagnostics.Process captureProcess;
         private System.Threading.Thread captureThread;
         private volatile bool capturing = false;
 
@@ -221,52 +221,63 @@ namespace HTCommander.Platform.Linux
 
         public void Start()
         {
-            if (stream != IntPtr.Zero) return;
+            if (capturing) return;
 
-            var inputParams = new PortAudioNative.PaStreamParameters
+            // Use parecord (PulseAudio/PipeWire CLI) for reliable audio capture
+            // This works on PipeWire, PulseAudio, and ALSA via compatibility layers
+            try
             {
-                device = PortAudioNative.Pa_GetDefaultInputDevice(),
-                channelCount = _channels,
-                sampleFormat = (uint)(_bitsPerSample == 16 ? 0x00000008 : 0x00000001),
-                suggestedLatency = 0.1,
-                hostApiSpecificStreamInfo = IntPtr.Zero
-            };
+                string format = _bitsPerSample == 16 ? "s16le" : "float32le";
+                var psi = new System.Diagnostics.ProcessStartInfo("parecord",
+                    $"--format={format} --rate={_sampleRate} --channels={_channels} --raw --latency-msec=20")
+                {
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
 
-            PortAudioNative.Pa_OpenStream(
-                out stream, ref inputParams, IntPtr.Zero,
-                _sampleRate, 256, 0, null, IntPtr.Zero);
+                captureProcess = System.Diagnostics.Process.Start(psi);
+                if (captureProcess == null) return;
 
-            if (stream != IntPtr.Zero)
-            {
-                PortAudioNative.Pa_StartStream(stream);
                 capturing = true;
                 captureThread = new System.Threading.Thread(CaptureLoop) { IsBackground = true };
                 captureThread.Start();
+            }
+            catch (Exception)
+            {
+                // parecord not available
             }
         }
 
         private void CaptureLoop()
         {
             int bytesPerFrame = _channels * (_bitsPerSample / 8);
-            int framesPerBuffer = 256;
+            int framesPerBuffer = 1024; // ~21ms at 48kHz
             int bufferSize = framesPerBuffer * bytesPerFrame;
             byte[] buffer = new byte[bufferSize];
 
-            while (capturing && stream != IntPtr.Zero)
+            var stdout = captureProcess?.StandardOutput?.BaseStream;
+            if (stdout == null) return;
+
+            while (capturing)
             {
-                IntPtr dataPtr = Marshal.AllocHGlobal(bufferSize);
                 try
                 {
-                    int err = PortAudioNative.Pa_ReadStream(stream, dataPtr, (uint)framesPerBuffer);
-                    if (err == 0)
+                    int totalRead = 0;
+                    while (totalRead < bufferSize && capturing)
                     {
-                        Marshal.Copy(dataPtr, buffer, 0, bufferSize);
-                        DataAvailable?.Invoke(buffer, bufferSize);
+                        int bytesRead = stdout.Read(buffer, totalRead, bufferSize - totalRead);
+                        if (bytesRead <= 0) { capturing = false; break; }
+                        totalRead += bytesRead;
                     }
+
+                    if (totalRead > 0)
+                        DataAvailable?.Invoke(buffer, totalRead);
                 }
-                finally
+                catch (Exception)
                 {
-                    Marshal.FreeHGlobal(dataPtr);
+                    break;
                 }
             }
         }
@@ -274,12 +285,17 @@ namespace HTCommander.Platform.Linux
         public void Stop()
         {
             capturing = false;
-            if (stream != IntPtr.Zero)
+            try
             {
-                PortAudioNative.Pa_StopStream(stream);
-                PortAudioNative.Pa_CloseStream(stream);
-                stream = IntPtr.Zero;
+                if (captureProcess != null && !captureProcess.HasExited)
+                {
+                    captureProcess.Kill();
+                    captureProcess.WaitForExit(1000);
+                }
+                captureProcess?.Dispose();
+                captureProcess = null;
             }
+            catch (Exception) { }
             captureThread?.Join(1000);
             captureThread = null;
         }

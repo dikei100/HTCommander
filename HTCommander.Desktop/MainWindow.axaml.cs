@@ -107,6 +107,7 @@ namespace HTCommander.Desktop
                         MenuGpsEnabled.IsEnabled = true;
                         MenuAudioEnabled.IsEnabled = true;
                         MenuAudioControls.IsEnabled = true;
+                        MainPttButton.IsVisible = true;
                         activeDeviceId = deviceId;
                         if (RadioPanelCheck.IsChecked == true) RadioPanel.IsVisible = true;
                         RadioStateText.Text = "Connected";
@@ -133,6 +134,7 @@ namespace HTCommander.Desktop
                         MenuGpsEnabled.IsEnabled = false;
                         MenuAudioEnabled.IsEnabled = false;
                         MenuAudioControls.IsEnabled = false;
+                        MainPttButton.IsVisible = false;
                         BatteryStatusText.Text = "";
                         if (deviceId == activeDeviceId)
                         {
@@ -518,6 +520,7 @@ namespace HTCommander.Desktop
             bool newState = !(AudioEnabledCheck.IsChecked == true);
             AudioEnabledCheck.IsChecked = newState;
             DataBroker.Dispatch(activeDeviceId, "SetAudio", newState, store: false);
+            DataBroker.Dispatch(activeDeviceId, "AudioState", newState, store: true);
         }
 
         private void OnAudioStateChanged(int deviceId, string name, object data)
@@ -615,8 +618,108 @@ namespace HTCommander.Desktop
             await dialog.ShowDialog(this);
         }
 
+        #region PTT (Push to Talk)
+
+        private IAudioInput mainMicInput;
+        private bool mainPttActive = false;
+
+        private void EnsureMicCapture()
+        {
+            if (mainMicInput != null) return;
+            try
+            {
+                var audio = Program.PlatformServices?.Audio;
+                if (audio == null) return;
+                mainMicInput = audio.CreateInput(48000, 16, 1);
+                if (mainMicInput != null)
+                {
+                    mainMicInput.DataAvailable += OnMainMicData;
+                    mainMicInput.Start();
+                }
+            }
+            catch (Exception) { }
+        }
+
+        private void OnMainMicData(byte[] data, int bytesRecorded)
+        {
+            if (!mainPttActive || bytesRecorded == 0 || activeDeviceId < 0) return;
+            byte[] pcm = ResampleTo32kHz(data, bytesRecorded, 48000);
+            if (pcm != null && pcm.Length > 0)
+                broker.Dispatch(activeDeviceId, "TransmitVoicePCM", pcm, store: false);
+        }
+
+        private static byte[] ResampleTo32kHz(byte[] input, int bytesRecorded, int srcRate)
+        {
+            if (srcRate == 32000)
+            {
+                byte[] copy = new byte[bytesRecorded];
+                Array.Copy(input, 0, copy, 0, bytesRecorded);
+                return copy;
+            }
+            int srcSamples = bytesRecorded / 2;
+            int dstSamples = (int)((long)srcSamples * 32000 / srcRate);
+            if (dstSamples <= 0) return null;
+            byte[] output = new byte[dstSamples * 2];
+            double ratio = (double)srcRate / 32000;
+            for (int i = 0; i < dstSamples; i++)
+            {
+                double srcPos = i * ratio;
+                int idx = (int)srcPos;
+                double frac = srcPos - idx;
+                int i0 = Math.Clamp(idx, 0, srcSamples - 1);
+                int i1 = Math.Clamp(idx + 1, 0, srcSamples - 1);
+                short s0 = (short)(input[i0 * 2] | (input[i0 * 2 + 1] << 8));
+                short s1 = (short)(input[i1 * 2] | (input[i1 * 2 + 1] << 8));
+                short val = (short)(s0 + (s1 - s0) * frac);
+                output[i * 2] = (byte)(val & 0xFF);
+                output[i * 2 + 1] = (byte)((val >> 8) & 0xFF);
+            }
+            return output;
+        }
+
+        private void StartMainPtt()
+        {
+            if (mainPttActive || activeDeviceId < 0) return;
+            EnsureMicCapture();
+            mainPttActive = true;
+            MainPttButton.Background = new SolidColorBrush(Color.Parse("#C62828"));
+            MainPttText.Text = "TRANSMITTING...";
+        }
+
+        private void StopMainPtt()
+        {
+            if (!mainPttActive) return;
+            mainPttActive = false;
+            MainPttButton.Background = new SolidColorBrush(Color.Parse("#444"));
+            MainPttText.Text = "Push to Talk";
+            // Don't cancel — let buffered audio finish transmitting naturally
+        }
+
+        private void MainPttButton_PointerPressed(object sender, Avalonia.Input.PointerPressedEventArgs e)
+        {
+            StartMainPtt();
+        }
+
+        private void MainPttButton_PointerReleased(object sender, Avalonia.Input.PointerReleasedEventArgs e)
+        {
+            StopMainPtt();
+        }
+
+        // Spacebar PTT disabled on main window — conflicts with text input
+
+        #endregion
+
         protected override void OnClosed(EventArgs e)
         {
+            // Clean up mic
+            if (mainMicInput != null)
+            {
+                mainMicInput.DataAvailable -= OnMainMicData;
+                mainMicInput.Stop();
+                mainMicInput.Dispose();
+                mainMicInput = null;
+            }
+
             // Disconnect all radios
             foreach (var radio in connectedRadios.ToArray())
             {

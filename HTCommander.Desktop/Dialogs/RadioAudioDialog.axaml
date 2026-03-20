@@ -4,7 +4,10 @@
         Title="Audio Controls"
         Width="440" Height="520"
         MinWidth="380" MinHeight="400"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Focusable="True"
+        KeyDown="Window_KeyDown"
+        KeyUp="Window_KeyUp">
     <DockPanel Margin="16">
         <Button DockPanel.Dock="Bottom" Content="Close" Click="CloseButton_Click"
                 HorizontalAlignment="Right" Padding="16,6" Margin="0,12,0,0" />
@@ -58,6 +61,23 @@
                             TickFrequency="1" IsSnapToTickEnabled="True"
                             ValueChanged="OutputVolumeSlider_Changed" />
                     <CheckBox Name="MuteCheck" Content="Mute" Click="Mute_Click" />
+                </StackPanel>
+            </Border>
+
+            <!-- Microphone Transmit -->
+            <Border Background="#2D2D30" Padding="12" CornerRadius="4">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Microphone Transmit" FontWeight="SemiBold" FontSize="14" />
+                    <TextBlock Name="MicStatusText" Text="Hold button to transmit" Foreground="#888" FontSize="11" />
+                    <Border Name="TransmitButton" Height="48" CornerRadius="4"
+                            Background="#444" Cursor="Hand"
+                            PointerPressed="TransmitButton_PointerPressed"
+                            PointerReleased="TransmitButton_PointerReleased">
+                        <TextBlock Text="Push to Talk" FontSize="16" FontWeight="Bold"
+                                   Foreground="White" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="Or hold Space key while this window is focused" Foreground="#666" FontSize="10" />
                 </StackPanel>
             </Border>
         </StackPanel>

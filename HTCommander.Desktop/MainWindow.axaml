@@ -117,6 +117,16 @@
                         </Border>
                     </Grid>
 
+                    <!-- PTT button under radio image -->
+                    <Border Name="MainPttButton" Margin="12,8,12,0" Height="40" CornerRadius="4"
+                            Background="#444" Cursor="Hand" IsVisible="False"
+                            PointerPressed="MainPttButton_PointerPressed"
+                            PointerReleased="MainPttButton_PointerReleased">
+                        <TextBlock Name="MainPttText" Text="Push to Talk" FontSize="14" FontWeight="Bold"
+                                   Foreground="White" HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+
                     <!-- Info section below radio image -->
                     <StackPanel Margin="12,8,12,12" Spacing="6">
 

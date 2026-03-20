@@ -160,8 +160,11 @@ namespace HTCommander
             _platformServices = platformServices;
             broker = new DataBrokerClient();
 
-            // TODO: RadioAudio is injected by the platform-specific layer after construction
-            // RadioAudio = new RadioAudio(this, deviceid, mac);
+            // Create cross-platform RadioAudioManager if platform services are available
+            if (platformServices != null)
+            {
+                RadioAudio = new RadioAudioManager(deviceid, mac, platformServices);
+            }
 
             ClearChannelTimer.Elapsed += ClearFrequencyTimer_Elapsed;
             ClearChannelTimer.Enabled = false;

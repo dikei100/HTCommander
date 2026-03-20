@@ -26,6 +26,7 @@ namespace HTCommander.Desktop.TabControls
             broker = new DataBrokerClient();
 
             broker.Subscribe(DataBroker.AllDevices, new[] { "ProcessingVoice", "TextReady", "VoiceTransmitStateChanged" }, OnVoiceEvent);
+            broker.Subscribe(DataBroker.AllDevices, "State", OnRadioStateChanged);
             broker.Subscribe(1, "ConnectedRadios", OnConnectedRadiosChanged);
             broker.Subscribe(1, "VoiceHandlerState", OnVoiceHandlerStateChanged);
             broker.Subscribe(0, "AllowTransmit", OnAllowTransmitChanged);
@@ -109,7 +110,37 @@ namespace HTCommander.Desktop.TabControls
                     }
                 }
                 UpdateTransmitState();
+
+                if (!hasConnectedRadios)
+                {
+                    broker.Dispatch(1, "VoiceHandlerDisable", null, store: false);
+                }
+                // VoiceHandler enable happens in OnRadioStateChanged when state becomes "Connected"
             });
+        }
+
+        private void OnRadioStateChanged(int deviceId, string name, object data)
+        {
+            if (deviceId < 100) return; // Only care about radio devices
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (data is string stateStr && stateStr == "Connected")
+                {
+                    EnableVoiceHandler(deviceId);
+                }
+            });
+        }
+
+        private void EnableVoiceHandler(int deviceId)
+        {
+            string language = broker.GetValue<string>(0, "VoiceLanguage", "en");
+            string model = broker.GetValue<string>(0, "VoiceModel", "");
+            broker.Dispatch(1, "VoiceHandlerEnable", new
+            {
+                DeviceId = deviceId,
+                Language = language,
+                Model = model
+            }, store: false);
         }
 
         private void OnVoiceHandlerStateChanged(int deviceId, string name, object data)

@@ -80,7 +80,7 @@ namespace HTCommander.Platform.Linux
                 {
                     string voiceArg = _selectedVoice != null ? $"-v {_selectedVoice}" : "";
                     var psi = new ProcessStartInfo("espeak-ng",
-                        $"{voiceArg} -s 150 -w \"{tempFile}\" \"{text.Replace("\"", "\\\"")}\""
+                        $"{voiceArg} -s 110 -w \"{tempFile}\" \"{text.Replace("\"", "\\\"")}\""
                     )
                     {
                         UseShellExecute = false,
@@ -93,7 +93,63 @@ namespace HTCommander.Platform.Linux
 
                     if (File.Exists(tempFile))
                     {
-                        return File.ReadAllBytes(tempFile);
+                        byte[] wavData = File.ReadAllBytes(tempFile);
+                        if (wavData.Length <= 44) return wavData;
+
+                        // Read source sample rate from WAV header (bytes 24-27, little-endian)
+                        int srcRate = wavData[24] | (wavData[25] << 8) | (wavData[26] << 16) | (wavData[27] << 24);
+
+                        if (srcRate != sampleRate && srcRate > 0)
+                        {
+                            // Resample PCM from srcRate to sampleRate using linear interpolation
+                            // WAV header: 44 bytes, 16-bit mono PCM
+                            int srcSamples = (wavData.Length - 44) / 2;
+                            int dstSamples = (int)((long)srcSamples * sampleRate / srcRate);
+                            byte[] resampled = new byte[44 + dstSamples * 2];
+
+                            // Copy and update WAV header
+                            Array.Copy(wavData, 0, resampled, 0, 44);
+                            int dataSize = dstSamples * 2;
+                            int fileSize = dataSize + 36;
+                            resampled[4] = (byte)(fileSize & 0xFF);
+                            resampled[5] = (byte)((fileSize >> 8) & 0xFF);
+                            resampled[6] = (byte)((fileSize >> 16) & 0xFF);
+                            resampled[7] = (byte)((fileSize >> 24) & 0xFF);
+                            resampled[24] = (byte)(sampleRate & 0xFF);
+                            resampled[25] = (byte)((sampleRate >> 8) & 0xFF);
+                            resampled[26] = (byte)((sampleRate >> 16) & 0xFF);
+                            resampled[27] = (byte)((sampleRate >> 24) & 0xFF);
+                            int byteRate = sampleRate * 2; // 16-bit mono
+                            resampled[28] = (byte)(byteRate & 0xFF);
+                            resampled[29] = (byte)((byteRate >> 8) & 0xFF);
+                            resampled[30] = (byte)((byteRate >> 16) & 0xFF);
+                            resampled[31] = (byte)((byteRate >> 24) & 0xFF);
+                            resampled[40] = (byte)(dataSize & 0xFF);
+                            resampled[41] = (byte)((dataSize >> 8) & 0xFF);
+                            resampled[42] = (byte)((dataSize >> 16) & 0xFF);
+                            resampled[43] = (byte)((dataSize >> 24) & 0xFF);
+
+                            // Linear interpolation resample
+                            double ratio = (double)srcRate / sampleRate;
+                            for (int i = 0; i < dstSamples; i++)
+                            {
+                                double srcPos = i * ratio;
+                                int srcIdx = (int)srcPos;
+                                double frac = srcPos - srcIdx;
+
+                                short s0 = GetSample(wavData, 44, srcIdx, srcSamples);
+                                short s1 = GetSample(wavData, 44, srcIdx + 1, srcSamples);
+                                short interpolated = (short)(s0 + (s1 - s0) * frac);
+
+                                int dstOffset = 44 + i * 2;
+                                resampled[dstOffset] = (byte)(interpolated & 0xFF);
+                                resampled[dstOffset + 1] = (byte)((interpolated >> 8) & 0xFF);
+                            }
+
+                            return resampled;
+                        }
+
+                        return wavData;
                     }
                 }
                 finally
@@ -104,6 +160,14 @@ namespace HTCommander.Platform.Linux
             catch (Exception) { }
 
             return null;
+        }
+
+        private static short GetSample(byte[] wav, int headerSize, int index, int totalSamples)
+        {
+            if (index < 0) index = 0;
+            if (index >= totalSamples) index = totalSamples - 1;
+            int offset = headerSize + index * 2;
+            return (short)(wav[offset] | (wav[offset + 1] << 8));
         }
 
         private static bool CheckEspeakAvailable()
