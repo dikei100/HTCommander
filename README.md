@@ -25,6 +25,39 @@ An Amateur radio license is required to transmit using this software. You can ge
 - **Recording to WAV files** from radio audio
 - **APRS station markers** on map with OpenStreetMap
 
+### Download & Install
+
+Download the latest release from the [Releases page](https://github.com/dikei100/HTCommander-X/releases/latest).
+
+**Linux (AppImage)** — works on any distro, no installation needed:
+```bash
+chmod +x HTCommander-X-x86_64.AppImage
+./HTCommander-X-x86_64.AppImage
+```
+
+**Debian / Ubuntu:**
+```bash
+sudo dpkg -i htcommander_*_amd64.deb
+htcommander
+```
+
+**Fedora:**
+```bash
+sudo rpm -i htcommander-*.x86_64.rpm
+htcommander
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -U htcommander-*.pkg.tar.zst
+htcommander
+```
+
+**Windows:**
+Extract `HTCommander-X-win-x64.zip` and run `HTCommander.Desktop.exe`.
+
+Pair your radio to your computer via Bluetooth before launching. If your computer does not have Bluetooth, you can use an inexpensive Bluetooth USB dongle (make sure Bluetooth LE is supported). Pairing can be tricky — you have to pair TWO Bluetooth devices in quick succession. See the [Bluetooth pairing instructions](https://github.com/dikei100/HTCommander-X/blob/main/docs/Paring.md).
+
 ### Acknowledgements
 
 - **Ylian Saint-Hilaire** — original [HTCommander](https://github.com/Ylianst/HTCommander) author and maintainer
