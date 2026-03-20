@@ -5,23 +5,12 @@
 
 ![HTCommander-X screenshot](docs/images/htcommander-x.png)
 
-### What's New in HTCommander-X
+### What's new in HTCommander-X
 
 - **Cross-platform** — runs on Linux and Windows
 - **Avalonia UI** replaces WinForms, with Light / Dark / Auto themes
 - **Linux Bluetooth** via native RFCOMM sockets + BlueZ D-Bus discovery
 - **Linux audio** via PortAudio output + parecord mic capture, espeak-ng TTS
-- **Real-time spectrogram** visualization
-- **Detachable tabs** — right-click any tab to open in a separate window
-- **Multi-radio support** with active radio selection submenu
-- **Single-instance enforcement** with lock file
-- **VFO frequency mode toggle** via channel context menu
-- **Drag-and-drop channel copy** between slots
-- **AGWPE TCP server** for external TNC clients
-- **Built-in SMTP/IMAP** for Winlink email integration
-- **Audio clip manager** — record, rename, and transmit WAV clips
-- **Recording to WAV files** from radio audio
-- **APRS station markers** on map with OpenStreetMap
 
 ### Download & Install
 
