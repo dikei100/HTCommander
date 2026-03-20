@@ -5,6 +5,8 @@
 
 ![HTCommander-X screenshot](docs/images/htcommander-x.png)
 
+> **Note:** This software is still an early beta. Expect bugs and missing features. Use at your own risk — usage could potentially brick your radio. Use with caution.
+
 ### What's new in HTCommander-X
 
 - **Cross-platform** — runs on Linux and Windows
@@ -50,6 +52,10 @@ Extract `HTCommander-X-win-x64.zip` and run `HTCommander.Desktop.exe`.
 - **SarahRoseLives** — [flutter_benlink](https://github.com/SarahRoseLives/flutter_benlink) Flutter/Dart implementation, initialization sequence and VR-N76 quirks reference
 - **Lee, K0QED** — [APRS-Parser](https://github.com/k0qed/aprs-parser)
 - **OpenStreetMap** — [openstreetmap.org](https://openstreetmap.org), free geographic data for the world
+
+### Disclaimer
+
+This software is provided "as is", without warranty of any kind. The authors are not liable for any damage to equipment, software, or data resulting from the use of this software. Installation and use is entirely at your own risk.
 
 ---
 
