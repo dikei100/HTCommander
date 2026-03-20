@@ -364,6 +364,7 @@ namespace HTCommander.Desktop.Dialogs
 
         private void FreqCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (spectrogramPixels == null) return; // Called during InitializeComponent before constructor body
             switch (FreqCombo.SelectedIndex)
             {
                 case 0: maxFrequency = 16000; break;
