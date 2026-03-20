@@ -45,6 +45,30 @@ htcommander
 **Windows:**
 Extract `HTCommander-X-win-x64.zip` and run `HTCommander.Desktop.exe`.
 
+### External Software Integration (Windows)
+
+HTCommander-X can interface with external ham radio software (fldigi, WSJT-X, VaraFM, Direwolf, etc.) for digital modes and other applications. On Linux, virtual serial ports and audio devices are created automatically. On Windows, third-party drivers are required:
+
+**Rigctld (TCP) — no extra software needed**
+Most ham software supports the rigctld TCP protocol for radio control. Enable it in Settings > Servers. This works out of the box on all platforms — no additional installation required.
+
+**Virtual COM Ports — for software that requires serial CAT control (e.g. VaraFM)**
+
+1. Install [com0com](https://com0com.sourceforge.net/) — a free, open-source virtual null-modem driver
+2. Use the com0com setup utility to create a virtual COM port pair (e.g. COM10 ↔ COM11)
+3. In HTCommander-X Settings > Servers, enable the CAT Server and select one port of the pair (e.g. COM10)
+4. In your external software, configure the other port of the pair (e.g. COM11) as the CAT/radio port
+
+**Virtual Audio Routing — for software that needs audio I/O with the radio**
+
+Virtual audio devices allow external software to send and receive audio through the radio. This requires [VB-CABLE](https://vb-audio.com/Cable/) by VB-Audio:
+
+1. Install **VB-CABLE A+B** (paid version) — two virtual audio cables are needed: one for RX audio (radio → external software) and one for TX audio (external software → radio)
+2. Configure your external software to use the VB-CABLE devices as audio input/output
+3. Configure HTCommander-X audio routing in Settings > Audio to use the corresponding VB-CABLE devices
+
+Note: The free version of VB-CABLE only provides a single virtual cable, which is not sufficient for bidirectional audio routing. The A+B pack provides the two cables needed.
+
 ### Acknowledgements
 
 - **Ylian Saint-Hilaire** — original [HTCommander](https://github.com/Ylianst/HTCommander) author and maintainer

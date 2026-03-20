@@ -119,6 +119,10 @@
                     </StackPanel>
                     <StackPanel Spacing="6">
                         <CheckBox Name="CatServerCheck" Content="Enable CAT Server (Kenwood TS-2000)" />
+                        <Grid Name="CatComPortPanel" ColumnDefinitions="Auto,Auto" Margin="24,0,0,0" IsVisible="False">
+                            <TextBlock Grid.Column="0" Text="COM Port:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <ComboBox Name="CatComPortCombo" Grid.Column="1" Width="120" />
+                        </Grid>
                         <TextBlock Name="CatPortLabel" Text="" Foreground="{DynamicResource SecondaryText}" FontSize="11" Margin="24,0,0,0" />
                     </StackPanel>
                     <StackPanel Spacing="6">

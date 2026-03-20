@@ -100,6 +100,24 @@ namespace HTCommander.Desktop.Dialogs
             RigctldServerCheck.IsChecked = DataBroker.GetValue<int>(0, "RigctldServerEnabled", 0) == 1;
             RigctldPortUpDown.Value = DataBroker.GetValue<int>(0, "RigctldServerPort", 4532);
             CatServerCheck.IsChecked = DataBroker.GetValue<int>(0, "CatServerEnabled", 0) == 1;
+            // On Windows, show COM port selector for CAT server (com0com virtual pair)
+            if (OperatingSystem.IsWindows())
+            {
+                CatComPortPanel.IsVisible = true;
+                CatComPortCombo.Items.Add("None");
+                try
+                {
+                    foreach (var port in System.IO.Ports.SerialPort.GetPortNames())
+                        CatComPortCombo.Items.Add(port);
+                }
+                catch { }
+                string savedCatPort = DataBroker.GetValue<string>(0, "CatComPort", "None");
+                for (int i = 0; i < CatComPortCombo.Items.Count; i++)
+                {
+                    if (CatComPortCombo.Items[i]?.ToString() == savedCatPort) { CatComPortCombo.SelectedIndex = i; break; }
+                }
+                if (CatComPortCombo.SelectedIndex < 0) CatComPortCombo.SelectedIndex = 0;
+            }
             string catPath = DataBroker.GetValue<string>(1, "CatPortPath", "");
             CatPortLabel.Text = string.IsNullOrEmpty(catPath) ? "" : $"CAT port: {catPath}";
             VirtualAudioCheck.IsChecked = DataBroker.GetValue<int>(0, "VirtualAudioEnabled", 0) == 1;
@@ -264,6 +282,10 @@ namespace HTCommander.Desktop.Dialogs
             DataBroker.Dispatch(0, "RigctldServerEnabled", RigctldServerCheck.IsChecked == true ? 1 : 0);
             DataBroker.Dispatch(0, "RigctldServerPort", (int)(RigctldPortUpDown.Value ?? 4532));
             DataBroker.Dispatch(0, "CatServerEnabled", CatServerCheck.IsChecked == true ? 1 : 0);
+            if (OperatingSystem.IsWindows())
+            {
+                DataBroker.Dispatch(0, "CatComPort", CatComPortCombo.SelectedItem?.ToString() ?? "None");
+            }
             DataBroker.Dispatch(0, "VirtualAudioEnabled", VirtualAudioCheck.IsChecked == true ? 1 : 0);
 
             // Data sources

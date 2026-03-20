@@ -41,7 +41,11 @@ namespace HTCommander.Platform.Windows
 
         public IVirtualSerialPort CreateVirtualSerialPort()
         {
-            return null; // Windows: use com0com for virtual COM ports
+            // Read the user-configured COM port (one end of a com0com pair)
+            string comPort = DataBroker.GetValue<string>(0, "CatComPort", "");
+            if (string.IsNullOrEmpty(comPort) || comPort == "None")
+                return null;
+            return new WinVirtualSerialPort(comPort);
         }
 
         public IVirtualAudioProvider CreateVirtualAudioProvider()
