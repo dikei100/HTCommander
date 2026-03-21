@@ -63,10 +63,12 @@ namespace HTCommander
 
         public TncDataFragment(byte[] msg)
         {
+            if (msg == null || msg.Length < 6) throw new ArgumentException("TncDataFragment message too short (need >= 6 bytes)");
             final_fragment = (msg[5] & 0x80) != 0;
             bool with_channel_id = (msg[5] & 0x40) != 0;
             fragment_id = msg[5] & 0x3F;
             int dataLen = msg.Length - 6 - (with_channel_id ? 1 : 0);
+            if (dataLen < 0) { data = Array.Empty<byte>(); channel_id = -1; return; }
             data = new byte[dataLen];
             Array.Copy(msg, 6, data, 0, dataLen);
             if (with_channel_id) { channel_id = msg[msg.Length - 1]; } else { channel_id = -1; }

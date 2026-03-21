@@ -430,8 +430,13 @@ namespace HTCommander
                 return;
             }
             
-            currentFilename = parts[0];
-            
+            currentFilename = Path.GetFileName(parts[0].Replace("..", ""));
+            if (string.IsNullOrWhiteSpace(currentFilename))
+            {
+                SendNotReady("Invalid filename");
+                return;
+            }
+
             if (!long.TryParse(parts[1], out fileSize))
             {
                 SendNotReady("Invalid file size");

@@ -104,6 +104,7 @@ namespace HTCommander
                 AX25Address addr = AX25Address.DecodeAX25Address(data, i, out last);
                 if (addr == null) return null;
                 addresses.Add(addr);
+                if (addresses.Count > 10) return null; // AX.25 spec: max 10 addresses
                 done = last;
                 i += 7;
             } while (!done);

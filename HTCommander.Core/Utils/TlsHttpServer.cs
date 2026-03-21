@@ -136,12 +136,23 @@ namespace HTCommander
 
         private async Task AcceptLoopAsync(CancellationToken ct)
         {
+            int activeConnections = 0;
             try
             {
                 while (!ct.IsCancellationRequested)
                 {
                     TcpClient client = await tcpListener.AcceptTcpClientAsync();
-                    _ = Task.Run(() => HandleClientAsync(client, ct));
+                    if (Interlocked.CompareExchange(ref activeConnections, 0, 0) >= 100)
+                    {
+                        try { client.Close(); } catch { }
+                        continue;
+                    }
+                    Interlocked.Increment(ref activeConnections);
+                    _ = Task.Run(async () =>
+                    {
+                        try { await HandleClientAsync(client, ct); }
+                        finally { Interlocked.Decrement(ref activeConnections); }
+                    });
                 }
             }
             catch (SocketException) { }
@@ -398,9 +409,12 @@ namespace HTCommander
             {
                 foreach (var kvp in response.Headers)
                 {
-                    sb.Append(kvp.Key);
+                    // Sanitize header values to prevent header injection via CRLF
+                    string safeKey = kvp.Key.Replace("\r", "").Replace("\n", "");
+                    string safeValue = kvp.Value.Replace("\r", "").Replace("\n", "");
+                    sb.Append(safeKey);
                     sb.Append(": ");
-                    sb.Append(kvp.Value);
+                    sb.Append(safeValue);
                     sb.Append("\r\n");
                 }
             }

@@ -34,7 +34,7 @@ namespace HTCommander
         {
             try
             {
-                listener = new TcpListener(IPAddress.Any, Port);
+                listener = new TcpListener(IPAddress.Loopback, Port);
                 listener.Start();
                 running = true;
                 listenerThread = new Thread(ListenerLoop);
@@ -259,7 +259,7 @@ namespace HTCommander
                 broker.LogInfo($"IMAP command error: {ex.Message}");
                 try
                 {
-                    SendResponse(tag, $"BAD Command failed: {ex.Message}");
+                    SendResponse(tag, "BAD Command failed");
                 }
                 catch
                 {
@@ -352,9 +352,14 @@ namespace HTCommander
 
             // Parse size {396}
             string sizeStr = parts[2].Trim('{', '}');
-            if (!int.TryParse(sizeStr, out int messageSize))
+            if (!int.TryParse(sizeStr, out int messageSize) || messageSize < 0)
             {
                 SendResponse(tag, "BAD Invalid message size");
+                return;
+            }
+            if (messageSize > 10 * 1024 * 1024) // 10MB max
+            {
+                SendResponse(tag, "NO Message too large");
                 return;
             }
 
@@ -1097,7 +1102,9 @@ namespace HTCommander
 
         private void SendResponse(string tag, string response)
         {
-            string line = $"{tag} {response}";
+            // Sanitize tag to prevent IMAP response injection via CRLF
+            string safeTag = tag.Replace("\r", "").Replace("\n", "");
+            string line = $"{safeTag} {response}";
             writer.WriteLine(line);
         }
 

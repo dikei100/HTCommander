@@ -184,6 +184,13 @@ namespace HTCommander
 
                     lineBuffer.Clear();
                     lineBuffer.Append(bufferedText);
+
+                    // Prevent unbounded buffer growth
+                    if (lineBuffer.Length > 10 * 1024 * 1024) // 10MB matches advertised SIZE
+                    {
+                        SendResponse("552 Too much data");
+                        return;
+                    }
                 }
             }
             catch (Exception)
@@ -238,7 +245,7 @@ namespace HTCommander
             catch (Exception ex)
             {
                 broker.LogInfo($"SMTP command error: {ex.Message}");
-                SendResponse($"451 Requested action aborted: {ex.Message}");
+                SendResponse("451 Requested action aborted");
             }
         }
 

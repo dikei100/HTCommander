@@ -121,6 +121,9 @@ namespace HTCommander
                 Directory.CreateDirectory(Path.GetDirectoryName(pfxPath));
                 File.WriteAllBytes(pfxPath, pfxBytes);
 
+                // Set restrictive file permissions on Linux/macOS (owner-only read/write)
+                try { File.SetUnixFileMode(pfxPath, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch { }
+
                 return X509CertificateLoader.LoadPkcs12(pfxBytes, null, X509KeyStorageFlags.Exportable);
             }
         }

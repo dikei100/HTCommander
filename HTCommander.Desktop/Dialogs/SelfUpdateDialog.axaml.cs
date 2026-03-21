@@ -91,7 +91,7 @@ namespace HTCommander.Desktop.Dialogs
 
         private void ViewReleaseButton_Click(object sender, RoutedEventArgs e)
         {
-            if (!string.IsNullOrEmpty(_releaseUrl))
+            if (!string.IsNullOrEmpty(_releaseUrl) && _releaseUrl.StartsWith("https://github.com/"))
             {
                 Program.PlatformServices?.PlatformUtils?.OpenUrl(_releaseUrl);
             }

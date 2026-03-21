@@ -1138,6 +1138,7 @@ namespace HTCommander
             if (state != RadioState.Connected && state != RadioState.Connecting) return;
             if (error != null) { Debug("Notification ERROR SET"); }
             if (value == null) { Debug("Notification: NULL"); return; }
+            if (value.Length < 4) { Debug("Notification: too short (" + value.Length + " bytes)"); return; }
 
             if (PacketTrace) Debug("-----> " + Utils.BytesToHex(value));
             else AppCallbacks.BlockBoxEvent("-----> " + Utils.BytesToHex(value));
@@ -1145,22 +1146,30 @@ namespace HTCommander
             RadioCommandGroup group = (RadioCommandGroup)Utils.GetShort(value, 0);
             DispatchRawCommand(value);
 
-            switch (group)
+            try
             {
-                case RadioCommandGroup.BASIC:
-                    HandleBasicCommand(value);
-                    break;
-                case RadioCommandGroup.EXTENDED:
-                    HandleExtendedCommand(value);
-                    break;
-                default:
-                    Debug("Unexpected Command Group: " + group);
-                    break;
+                switch (group)
+                {
+                    case RadioCommandGroup.BASIC:
+                        HandleBasicCommand(value);
+                        break;
+                    case RadioCommandGroup.EXTENDED:
+                        HandleExtendedCommand(value);
+                        break;
+                    default:
+                        Debug("Unexpected Command Group: " + group);
+                        break;
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                Debug("Malformed radio response: " + ex.Message);
             }
         }
 
         private void HandleBasicCommand(byte[] value)
         {
+            if (value.Length < 5) { Debug("Basic command too short"); return; }
             RadioBasicCommand cmd = (RadioBasicCommand)(Utils.GetShort(value, 2) & 0x7FFF);
             if (PacketTrace && cmd != RadioBasicCommand.EVENT_NOTIFICATION)
                 Debug($"Response 'BASIC' / '{cmd}'");
@@ -1242,7 +1251,7 @@ namespace HTCommander
         private void HandleReadRfChannel(byte[] value)
         {
             RadioChannelInfo c = new RadioChannelInfo(value);
-            if (Channels != null) { Channels[c.channel_id] = c; }
+            if (Channels != null && c.channel_id >= 0 && c.channel_id < Channels.Length) { Channels[c.channel_id] = c; }
             UpdateCurrentChannelName();
             if (AllChannelsLoaded())
             {

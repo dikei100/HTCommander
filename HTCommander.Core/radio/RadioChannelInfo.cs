@@ -38,6 +38,7 @@ namespace HTCommander
 
         public RadioChannelInfo(byte[] msg)
         {
+            if (msg == null || msg.Length < 30) throw new ArgumentException("RadioChannelInfo message too short (need >= 30 bytes)");
             raw = msg;
             channel_id = msg[5];
             tx_mod = (RadioModulationType)(msg[6] >> 6);

@@ -34,11 +34,26 @@ namespace HTCommander
         private bool _disposed = false;
         private volatile bool _isPlaying = false;
 
+        /// <summary>
+        /// Validates a clip name and returns the safe file path within clipsDir.
+        /// Returns null if the name is invalid or would escape the clips directory.
+        /// </summary>
+        private string SafeClipPath(string clipName)
+        {
+            if (string.IsNullOrEmpty(clipName)) return null;
+            // Strip path separators and parent-directory traversal
+            string safeName = Path.GetFileName(clipName);
+            if (string.IsNullOrEmpty(safeName) || safeName != clipName) return null;
+            string fullPath = Path.GetFullPath(Path.Combine(clipsDir, safeName + ".wav"));
+            if (!fullPath.StartsWith(clipsDir + Path.DirectorySeparatorChar)) return null;
+            return fullPath;
+        }
+
         public AudioClipHandler()
         {
             broker = new DataBrokerClient();
 
-            clipsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "HTCommander", "Clips");
+            clipsDir = Path.GetFullPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "HTCommander", "Clips"));
             Directory.CreateDirectory(clipsDir);
 
             broker.Subscribe(DataBroker.AllDevices, "PlayAudioClip", OnPlayAudioClip);
@@ -168,7 +183,8 @@ namespace HTCommander
             if (_disposed) return;
             if (!(data is string clipName) || string.IsNullOrEmpty(clipName)) return;
 
-            string filePath = Path.Combine(clipsDir, clipName + ".wav");
+            string filePath = SafeClipPath(clipName);
+            if (filePath == null) { broker.LogError($"Invalid clip name: {clipName}"); return; }
             if (!File.Exists(filePath))
             {
                 broker.LogError($"Audio clip not found: {clipName}");
@@ -274,7 +290,8 @@ namespace HTCommander
 
             try
             {
-                string filePath = Path.Combine(clipsDir, clipName + ".wav");
+                string filePath = SafeClipPath(clipName);
+                if (filePath == null) { broker.LogError($"Invalid clip name: {clipName}"); return; }
                 if (File.Exists(filePath))
                 {
                     File.Delete(filePath);
@@ -303,8 +320,9 @@ namespace HTCommander
 
             try
             {
-                string oldPath = Path.Combine(clipsDir, oldName + ".wav");
-                string newPath = Path.Combine(clipsDir, newName + ".wav");
+                string oldPath = SafeClipPath(oldName);
+                string newPath = SafeClipPath(newName);
+                if (oldPath == null || newPath == null) { broker.LogError($"Invalid clip name"); return; }
 
                 if (File.Exists(oldPath) && !File.Exists(newPath))
                 {
@@ -352,7 +370,8 @@ namespace HTCommander
 
                 if (string.IsNullOrEmpty(clipName) || pcmData == null || pcmData.Length == 0) return;
 
-                string filePath = Path.Combine(clipsDir, clipName + ".wav");
+                string filePath = SafeClipPath(clipName);
+                if (filePath == null) { broker.LogError($"Invalid clip name: {clipName}"); return; }
                 WriteWavFile(filePath, pcmData, sampleRate, 1, 16);
                 broker.LogInfo($"Saved audio clip: {clipName}");
             }

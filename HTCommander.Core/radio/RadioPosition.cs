@@ -59,9 +59,11 @@ namespace HTCommander.radio
 
         public RadioPosition(byte[] msg)
         {
+            if (msg == null || msg.Length < 5) throw new ArgumentException("RadioPosition message too short (need >= 5 bytes)");
             Status = (Radio.RadioCommandState)msg[4];
             if (Status == Radio.RadioCommandState.SUCCESS)
             {
+                if (msg.Length < 11) throw new ArgumentException("RadioPosition SUCCESS message too short (need >= 11 bytes)");
                 ReceivedTime = DateTime.Now;
                 LatitudeRaw = (msg[5] << 16) + (msg[6] << 8) + msg[7];
                 LongitudeRaw = (msg[8] << 16) + (msg[9] << 8) + msg[10];
@@ -69,7 +71,7 @@ namespace HTCommander.radio
                 LongitudeStr = ConvertLatitudeToDms(LongitudeRaw);
                 Latitude = ConvertLatitude(LatitudeRaw);
                 Longitude = ConvertLatitude(LongitudeRaw);
-                if (msg.Length > 11)
+                if (msg.Length >= 23)
                 {
                     Altitude = (msg[11] << 8) + msg[12];
                     Speed = (msg[13] << 8) + msg[14];

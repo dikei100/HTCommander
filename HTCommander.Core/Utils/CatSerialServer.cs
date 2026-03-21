@@ -129,6 +129,13 @@ namespace HTCommander
             string text = Encoding.ASCII.GetString(data, 0, length);
             commandBuffer.Append(text);
 
+            // Prevent unbounded buffer growth
+            if (commandBuffer.Length > 1024)
+            {
+                commandBuffer.Clear();
+                return;
+            }
+
             // Process complete commands (semicolon-terminated)
             string buffer = commandBuffer.ToString();
             int semicolon;

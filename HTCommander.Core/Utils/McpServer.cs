@@ -10,6 +10,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 
 using System;
 using System.IO;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
@@ -21,6 +22,7 @@ namespace HTCommander
     /// MCP server data handler. Listens for HTTP requests on a configurable port
     /// and handles MCP JSON-RPC 2.0 protocol messages for radio control and debugging.
     /// Auto-starts/stops based on McpServerEnabled and McpServerPort settings.
+    /// Requires Bearer token authentication when ServerBindAll is enabled.
     /// </summary>
     public class McpServer : IDisposable
     {
@@ -32,6 +34,7 @@ namespace HTCommander
         private int port;
         private bool running = false;
         private bool tlsEnabled = false;
+        private string apiToken;
 
         public McpServer()
         {
@@ -40,11 +43,20 @@ namespace HTCommander
             resources = new McpResources(broker);
             protocolHandler = new McpProtocolHandler(tools, resources);
 
+            // Ensure an API token exists for MCP authentication
+            apiToken = broker.GetValue<string>(0, "McpApiToken", "");
+            if (string.IsNullOrEmpty(apiToken))
+            {
+                apiToken = GenerateApiToken();
+                broker.Dispatch(0, "McpApiToken", apiToken);
+            }
+
             broker.Subscribe(0, "McpServerEnabled", OnSettingChanged);
             broker.Subscribe(0, "McpServerPort", OnSettingChanged);
             broker.Subscribe(0, "McpDebugToolsEnabled", OnSettingChanged);
             broker.Subscribe(0, "ServerBindAll", OnSettingChanged);
             broker.Subscribe(0, "TlsEnabled", OnSettingChanged);
+            broker.Subscribe(0, "McpApiToken", OnTokenChanged);
 
             int enabled = broker.GetValue<int>(0, "McpServerEnabled", 0);
             if (enabled == 1)
@@ -53,6 +65,19 @@ namespace HTCommander
                 tlsEnabled = broker.GetValue<int>(0, "TlsEnabled", 0) == 1;
                 Start();
             }
+        }
+
+        private static string GenerateApiToken()
+        {
+            byte[] tokenBytes = new byte[24];
+            using (var rng = RandomNumberGenerator.Create()) { rng.GetBytes(tokenBytes); }
+            return Convert.ToBase64String(tokenBytes);
+        }
+
+        private void OnTokenChanged(int deviceId, string name, object data)
+        {
+            if (data is string newToken && !string.IsNullOrEmpty(newToken))
+                apiToken = newToken;
         }
 
         private void OnSettingChanged(int deviceId, string name, object data)
@@ -135,10 +160,11 @@ namespace HTCommander
         {
             var response = new TlsHttpServer.HttpResponse();
 
-            // Add CORS headers
-            response.Headers["Access-Control-Allow-Origin"] = "*";
+            // CORS: restrict to same-origin requests via required custom header
+            response.Headers["Access-Control-Allow-Origin"] = request.Headers != null && request.Headers.ContainsKey("Origin") ? request.Headers["Origin"] : "null";
             response.Headers["Access-Control-Allow-Methods"] = "POST, OPTIONS";
-            response.Headers["Access-Control-Allow-Headers"] = "Content-Type";
+            response.Headers["Access-Control-Allow-Headers"] = "Content-Type, X-MCP-Auth";
+            response.Headers["Vary"] = "Origin";
 
             // Handle preflight
             if (request.Method == "OPTIONS")
@@ -156,6 +182,23 @@ namespace HTCommander
                 response.ContentType = "application/json";
                 response.Body = Encoding.UTF8.GetBytes("{\"error\":\"Method not allowed. Use POST.\"}");
                 return response;
+            }
+
+            // Authenticate: require Bearer token when binding to all interfaces
+            bool bindAll = broker.GetValue<int>(0, "ServerBindAll", 0) == 1;
+            if (bindAll && !string.IsNullOrEmpty(apiToken))
+            {
+                string authHeader = null;
+                if (request.Headers != null && request.Headers.ContainsKey("Authorization"))
+                    authHeader = request.Headers["Authorization"];
+                if (authHeader == null || authHeader != "Bearer " + apiToken)
+                {
+                    response.StatusCode = 401;
+                    response.StatusText = "Unauthorized";
+                    response.ContentType = "application/json";
+                    response.Body = Encoding.UTF8.GetBytes("{\"error\":\"Bearer token required. Set Authorization: Bearer <token> header.\"}");
+                    return response;
+                }
             }
 
             try

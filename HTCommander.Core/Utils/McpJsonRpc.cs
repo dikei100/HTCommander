@@ -224,9 +224,9 @@ namespace HTCommander
             {
                 response = HandleMethod(request);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                response = MakeError(request.Id, -32603, "Internal error: " + ex.Message);
+                response = MakeError(request.Id, -32603, "Internal error");
             }
 
             return SerializeResponse(response);

@@ -66,6 +66,9 @@ namespace HTCommander
                 User = BitConverter.ToUInt32(header, 32)
             };
 
+            if (frame.DataLen > 65536)
+                throw new IOException("AGWPE frame DataLen exceeds maximum (65536 bytes)");
+
             if (frame.DataLen > 0)
             {
                 frame.Data = new byte[frame.DataLen];
@@ -114,6 +117,7 @@ namespace HTCommander
         private Task serverTask;
         private int port;
         private bool running = false;
+        private bool bindAll = false;
         private string sessionTo = null;
         private string sessionFrom = null;
 
@@ -122,6 +126,7 @@ namespace HTCommander
             broker = new DataBrokerClient();
             broker.Subscribe(0, "AgwpeServerEnabled", OnSettingChanged);
             broker.Subscribe(0, "AgwpeServerPort", OnSettingChanged);
+            broker.Subscribe(0, "ServerBindAll", OnSettingChanged);
             broker.Subscribe(DataBroker.AllDevices, "UniqueDataFrame", OnUniqueDataFrame);
 
             // Auto-start if enabled
@@ -129,6 +134,7 @@ namespace HTCommander
             if (enabled == 1)
             {
                 port = broker.GetValue<int>(0, "AgwpeServerPort", 8000);
+                bindAll = broker.GetValue<int>(0, "ServerBindAll", 0) == 1;
                 Start();
             }
         }
@@ -137,18 +143,21 @@ namespace HTCommander
         {
             int enabled = broker.GetValue<int>(0, "AgwpeServerEnabled", 0);
             int newPort = broker.GetValue<int>(0, "AgwpeServerPort", 8000);
+            bool newBindAll = broker.GetValue<int>(0, "ServerBindAll", 0) == 1;
 
             if (enabled == 1)
             {
-                if (running && newPort != port)
+                if (running && (newPort != port || newBindAll != bindAll))
                 {
                     Stop();
                     port = newPort;
+                    bindAll = newBindAll;
                     Start();
                 }
                 else if (!running)
                 {
                     port = newPort;
+                    bindAll = newBindAll;
                     Start();
                 }
             }
@@ -164,11 +173,11 @@ namespace HTCommander
             try
             {
                 cts = new CancellationTokenSource();
-                listener = new TcpListener(IPAddress.Any, port);
+                listener = new TcpListener(bindAll ? IPAddress.Any : IPAddress.Loopback, port);
                 listener.Start();
                 running = true;
                 serverTask = Task.Run(() => AcceptClientsAsync(cts.Token), cts.Token);
-                Log($"AGWPE server started on port {port}");
+                Log($"AGWPE server started on port {port}" + (bindAll ? " (all interfaces)" : " (loopback only)"));
             }
             catch (Exception ex)
             {

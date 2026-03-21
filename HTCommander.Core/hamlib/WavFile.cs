@@ -130,6 +130,8 @@ namespace HamLib
                 {
                     chunkId = Encoding.ASCII.GetString(reader.ReadBytes(4));
                     chunkSize = reader.ReadInt32();
+                    if (chunkSize < 0 || chunkSize > fs.Length - fs.Position)
+                        throw new InvalidDataException("Invalid WAV chunk size");
 
                     if (chunkId != "data")
                     {

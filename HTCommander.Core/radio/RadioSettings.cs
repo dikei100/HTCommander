@@ -98,6 +98,7 @@ namespace HTCommander
 
         public RadioSettings(byte[] msg)
         {
+            if (msg == null || msg.Length < 25) throw new ArgumentException("RadioSettings message too short (need >= 25 bytes)");
             rawData = msg;
 
             channel_a = ((msg[5] & 0xF0) >> 4) + (msg[14] & 0xF0);

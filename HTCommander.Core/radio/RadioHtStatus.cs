@@ -36,6 +36,7 @@ namespace HTCommander
 
         public RadioHtStatus(byte[] msg)
         {
+            if (msg == null || msg.Length < 7) throw new ArgumentException("RadioHtStatus message too short (need >= 7 bytes)");
             raw = msg;
 
             // Two first bytes
@@ -52,7 +53,7 @@ namespace HTCommander
             is_aoc_connected = (msg[6] & 0x02) != 0;
 
             // Next two bytes
-            if (msg.Length == 9)
+            if (msg.Length >= 9)
             {
                 rssi = (msg[7] >> 4); // 0 to 16
                 curr_region = ((msg[7] & 0x0F) << 2) + (msg[8] >> 6);

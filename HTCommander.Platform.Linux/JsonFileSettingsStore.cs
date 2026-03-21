@@ -71,6 +71,8 @@ namespace HTCommander.Platform.Linux
                 var options = new JsonSerializerOptions { WriteIndented = true };
                 string json = JsonSerializer.Serialize(_settings, options);
                 File.WriteAllText(_filePath, json);
+                // Set restrictive file permissions (owner-only read/write) for settings containing credentials
+                try { File.SetUnixFileMode(_filePath, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch { }
             }
             catch (Exception)
             {

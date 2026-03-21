@@ -95,7 +95,9 @@ All four files are in `HTCommander.Core/Utils/`:
 | `get_setting` | Read a whitelisted application setting | `DataBroker.GetValue(0, name)` — validates name against `SettingsWhitelist` |
 | `set_setting` | Write a whitelisted application setting | `DataBroker.Dispatch(0, name, value)` — validates name, parses int if numeric |
 
-Whitelisted settings: `CallSign`, `StationId`, `AllowTransmit`, `Theme`, `CheckForUpdates`, `VoiceLanguage`, `Voice`, `SpeechToText`, `MicGain`, `OutputVolume`, `ServerBindAll`, `TlsEnabled`, `WebServerEnabled`, `WebServerPort`, `McpServerEnabled`, `McpServerPort`, `McpDebugToolsEnabled`, `RigctldServerEnabled`, `RigctldServerPort`, `CatServerEnabled`, `AgwpeServerEnabled`, `AgwpeServerPort`, `VirtualAudioEnabled`, `WinlinkPassword`, `WinlinkUseStationId`, `AirplaneServer`, `RepeaterBookCountry`, `RepeaterBookState`, `ShowAllChannels`, `ShowAirplanesOnMap`, `SoftwareModemMode`, `AudioOutputDevice`, `AudioInputDevice`.
+Whitelisted settings: `CallSign`, `StationId`, `AllowTransmit`, `Theme`, `CheckForUpdates`, `VoiceLanguage`, `Voice`, `SpeechToText`, `MicGain`, `OutputVolume`, `ServerBindAll`, `TlsEnabled`, `WebServerEnabled`, `WebServerPort`, `McpServerEnabled`, `McpServerPort`, `RigctldServerEnabled`, `RigctldServerPort`, `CatServerEnabled`, `AgwpeServerEnabled`, `AgwpeServerPort`, `VirtualAudioEnabled`, `WinlinkPassword`, `WinlinkUseStationId`, `AirplaneServer`, `RepeaterBookCountry`, `RepeaterBookState`, `ShowAllChannels`, `ShowAirplanesOnMap`, `SoftwareModemMode`, `AudioOutputDevice`, `AudioInputDevice`.
+
+**Note:** `McpDebugToolsEnabled` is intentionally **not** in the whitelist. It can only be toggled from the Settings UI to prevent remote privilege escalation via `set_setting` → `dispatch_event`.
 
 **Debug Tools (5, only available when `McpDebugToolsEnabled` is 1):**
 
@@ -135,7 +137,8 @@ Radio resources are generated dynamically — one set per connected radio.
 - **TLS**: When `TlsEnabled` is 1, uses `TcpListener` + `SslStream` with a self-signed certificate (auto-generated, stored as PFX in config directory). Required for mobile `getUserMedia()` mic access over LAN.
 - **Method**: `POST` to any path (e.g., `/`, `/mcp`)
 - **Content-Type**: `application/json` (JSON-RPC 2.0)
-- **CORS**: `Access-Control-Allow-Origin: *` (for browser-based MCP clients)
+- **CORS**: Reflects request `Origin` header with `Vary: Origin` (restricted, not wildcard)
+- **Authentication**: When `ServerBindAll` is enabled, requires `Authorization: Bearer <token>` header. Token auto-generated on first run, stored as `McpApiToken` in DataBroker device 0
 - **MCP Protocol Version**: `2024-11-05`
 - **Server Info**: `name: "htcommander"`, `version: "1.0.0"`
 

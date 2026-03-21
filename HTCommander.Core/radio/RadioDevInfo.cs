@@ -4,6 +4,8 @@ Licensed under the Apache License, Version 2.0 (the "License");
 http://www.apache.org/licenses/LICENSE-2.0
 */
 
+using System;
+
 namespace HTCommander
 {
     public class RadioDevInfo
@@ -29,6 +31,7 @@ namespace HTCommander
 
         public RadioDevInfo(byte[] msg)
         {
+            if (msg == null || msg.Length < 15) throw new ArgumentException("RadioDevInfo message too short (need >= 15 bytes)");
             raw = msg;
             vendor_id = msg[5];
             product_id = Utils.GetShort(msg, 6);

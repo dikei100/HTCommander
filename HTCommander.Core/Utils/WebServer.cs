@@ -146,7 +146,10 @@ namespace HTCommander
                     ContentType = "application/json",
                     Body = Encoding.UTF8.GetBytes(json)
                 };
-                resp.Headers["Access-Control-Allow-Origin"] = "*";
+                // CORS restricted to same-origin; mobile web UI is served from same host
+                if (request.Headers != null && request.Headers.ContainsKey("Origin"))
+                    resp.Headers["Access-Control-Allow-Origin"] = request.Headers["Origin"];
+                resp.Headers["Vary"] = "Origin";
                 return resp;
             }
 

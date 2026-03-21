@@ -32,6 +32,7 @@ namespace HTCommander
         private Task serverTask;
         private int port;
         private bool running = false;
+        private bool bindAll = false;
         private bool pttActive = false;
         private Timer pttSilenceTimer;
         private long cachedFrequency = 145500000;
@@ -45,6 +46,7 @@ namespace HTCommander
             broker = new DataBrokerClient();
             broker.Subscribe(0, "RigctldServerEnabled", OnSettingChanged);
             broker.Subscribe(0, "RigctldServerPort", OnSettingChanged);
+            broker.Subscribe(0, "ServerBindAll", OnSettingChanged);
             broker.Subscribe(1, "ConnectedRadios", OnConnectedRadiosChanged);
             broker.Subscribe(DataBroker.AllDevices, "Channels", OnChannelsChanged);
             broker.Subscribe(DataBroker.AllDevices, "Settings", OnSettingsChanged);
@@ -53,6 +55,7 @@ namespace HTCommander
             if (enabled == 1)
             {
                 port = broker.GetValue<int>(0, "RigctldServerPort", 4532);
+                bindAll = broker.GetValue<int>(0, "ServerBindAll", 0) == 1;
                 Start();
             }
         }
@@ -61,18 +64,21 @@ namespace HTCommander
         {
             int enabled = broker.GetValue<int>(0, "RigctldServerEnabled", 0);
             int newPort = broker.GetValue<int>(0, "RigctldServerPort", 4532);
+            bool newBindAll = broker.GetValue<int>(0, "ServerBindAll", 0) == 1;
 
             if (enabled == 1)
             {
-                if (running && newPort != port)
+                if (running && (newPort != port || newBindAll != bindAll))
                 {
                     Stop();
                     port = newPort;
+                    bindAll = newBindAll;
                     Start();
                 }
                 else if (!running)
                 {
                     port = newPort;
+                    bindAll = newBindAll;
                     Start();
                 }
             }
@@ -119,11 +125,11 @@ namespace HTCommander
             try
             {
                 cts = new CancellationTokenSource();
-                listener = new TcpListener(IPAddress.Any, port);
+                listener = new TcpListener(bindAll ? IPAddress.Any : IPAddress.Loopback, port);
                 listener.Start();
                 running = true;
                 serverTask = Task.Run(() => AcceptClientsAsync(cts.Token), cts.Token);
-                Log($"Rigctld server started on port {port}");
+                Log($"Rigctld server started on port {port}" + (bindAll ? " (all interfaces)" : " (loopback only)"));
             }
             catch (Exception ex)
             {
@@ -447,6 +453,7 @@ namespace HTCommander
                 {
                     string line = await reader.ReadLineAsync();
                     if (line == null) break; // Disconnected
+                    if (line.Length > 1024) continue; // Reject oversized commands
 
                     string response = server.ProcessCommand(line);
                     if (response == null) break; // quit command

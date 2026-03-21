@@ -118,7 +118,12 @@ namespace HTCommander.Desktop
 
         public static void Debug(string msg)
         {
-            try { File.AppendAllText("debug.log", msg + "\r\n"); } catch (Exception) { }
+            try
+            {
+                string logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "HTCommander", "debug.log");
+                File.AppendAllText(logPath, msg + "\r\n");
+            }
+            catch (Exception) { }
         }
     }
 }
