@@ -301,6 +301,11 @@ namespace HTCommander
                 address = address.Substring(1, address.Length - 2);
             }
 
+            if (rcptTo.Count >= 100)
+            {
+                SendResponse("452 Too many recipients");
+                return;
+            }
             rcptTo.Add(address);
             SendResponse("250 OK");
         }

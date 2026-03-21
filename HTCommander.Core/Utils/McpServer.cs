@@ -86,6 +86,13 @@ namespace HTCommander
             int newPort = broker.GetValue<int>(0, "McpServerPort", 5678);
             bool newTls = broker.GetValue<int>(0, "TlsEnabled", 0) == 1;
 
+            // Regenerate API token when ServerBindAll transitions to enabled (security hygiene)
+            if (name == "ServerBindAll" && data is int bindVal && bindVal == 1)
+            {
+                apiToken = GenerateApiToken();
+                broker.Dispatch(0, "McpApiToken", apiToken);
+            }
+
             if (enabled == 1)
             {
                 if (running && (newPort != port || newTls != tlsEnabled))
@@ -163,14 +170,25 @@ namespace HTCommander
             // CORS: validate origin against allowlist
             string origin = request.Headers != null && request.Headers.ContainsKey("Origin") ? request.Headers["Origin"] : null;
             string allowedOrigin = ValidateCorsOrigin(origin);
-            response.Headers["Access-Control-Allow-Origin"] = allowedOrigin ?? "null";
-            response.Headers["Access-Control-Allow-Methods"] = "POST, OPTIONS";
-            response.Headers["Access-Control-Allow-Headers"] = "Content-Type, X-MCP-Auth, Authorization";
+            if (allowedOrigin != null)
+            {
+                response.Headers["Access-Control-Allow-Origin"] = allowedOrigin;
+                response.Headers["Access-Control-Allow-Methods"] = "POST, OPTIONS";
+                response.Headers["Access-Control-Allow-Headers"] = "Content-Type, X-MCP-Auth, Authorization";
+            }
             response.Headers["Vary"] = "Origin";
 
             // Handle preflight
             if (request.Method == "OPTIONS")
             {
+                if (allowedOrigin == null)
+                {
+                    response.StatusCode = 403;
+                    response.StatusText = "Forbidden";
+                    response.ContentType = "application/json";
+                    response.Body = Encoding.UTF8.GetBytes("{\"error\":\"Origin not allowed\"}");
+                    return response;
+                }
                 response.StatusCode = 204;
                 response.StatusText = "No Content";
                 return response;
@@ -245,13 +263,23 @@ namespace HTCommander
             if (string.IsNullOrEmpty(origin)) return null;
             if (!Uri.TryCreate(origin, UriKind.Absolute, out Uri uri)) return null;
             string host = uri.Host;
-            if (host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]") return origin;
-            // Allow LAN IPs (private ranges) for ServerBindAll scenarios
+            if (host == "localhost" || host == "127.0.0.1" || host == "::1") return origin;
             if (System.Net.IPAddress.TryParse(host, out var ip))
             {
+                // Map IPv4-mapped IPv6 (::ffff:x.x.x.x) to its inner IPv4 address
+                if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
                 byte[] bytes = ip.GetAddressBytes();
+                // IPv4 private ranges
                 if (bytes.Length == 4 &&
-                    (bytes[0] == 10 || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) || (bytes[0] == 192 && bytes[1] == 168)))
+                    (bytes[0] == 10 || bytes[0] == 127 ||
+                     (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+                     (bytes[0] == 192 && bytes[1] == 168)))
+                    return origin;
+                // IPv6 loopback, link-local (fe80::/10), unique local (fc00::/7)
+                if (bytes.Length == 16 &&
+                    (System.Net.IPAddress.IsLoopback(ip) ||
+                     ip.IsIPv6LinkLocal ||
+                     (bytes[0] & 0xFE) == 0xFC))
                     return origin;
             }
             return null;

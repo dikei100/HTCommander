@@ -146,6 +146,7 @@ namespace HTCommander
                     ContentType = "application/json",
                     Body = Encoding.UTF8.GetBytes(json)
                 };
+                resp.Headers["Cache-Control"] = "no-store, no-cache";
                 // CORS restricted to localhost/LAN origins
                 string origin = request.Headers != null && request.Headers.ContainsKey("Origin") ? request.Headers["Origin"] : null;
                 string allowedOrigin = ValidateCorsOrigin(origin);
@@ -175,10 +176,10 @@ namespace HTCommander
                 return new TlsHttpServer.HttpResponse(403, "403 - Forbidden");
             }
 
-            if (File.Exists(filePath))
+            if (File.Exists(fullPath))
             {
-                byte[] fileBytes = File.ReadAllBytes(filePath);
-                string mimeType = GetMimeType(filePath);
+                byte[] fileBytes = File.ReadAllBytes(fullPath);
+                string mimeType = GetMimeType(fullPath);
 
                 return new TlsHttpServer.HttpResponse
                 {
@@ -224,12 +225,20 @@ namespace HTCommander
             if (string.IsNullOrEmpty(origin)) return null;
             if (!Uri.TryCreate(origin, UriKind.Absolute, out Uri uri)) return null;
             string host = uri.Host;
-            if (host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]") return origin;
+            if (host == "localhost" || host == "127.0.0.1" || host == "::1") return origin;
             if (System.Net.IPAddress.TryParse(host, out var ip))
             {
+                if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
                 byte[] bytes = ip.GetAddressBytes();
                 if (bytes.Length == 4 &&
-                    (bytes[0] == 10 || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) || (bytes[0] == 192 && bytes[1] == 168)))
+                    (bytes[0] == 10 || bytes[0] == 127 ||
+                     (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
+                     (bytes[0] == 192 && bytes[1] == 168)))
+                    return origin;
+                if (bytes.Length == 16 &&
+                    (System.Net.IPAddress.IsLoopback(ip) ||
+                     ip.IsIPv6LinkLocal ||
+                     (bytes[0] & 0xFE) == 0xFC))
                     return origin;
             }
             return null;

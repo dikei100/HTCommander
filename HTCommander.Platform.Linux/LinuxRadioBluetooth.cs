@@ -433,8 +433,15 @@ namespace HTCommander.Platform.Linux
                     continue;
                 }
 
-                if (VerifyGaiaResponse(fd, ch))
-                    return fd;
+                try
+                {
+                    if (VerifyGaiaResponse(fd, ch))
+                        return fd;
+                }
+                catch (Exception ex)
+                {
+                    Debug($"Channel {ch}: verification exception: {ex.Message}");
+                }
 
                 NativeMethods.close(fd);
             }

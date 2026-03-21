@@ -97,8 +97,9 @@ namespace HTCommander
         private void OnTransmitVoicePCM(int deviceId, string name, object data)
         {
             if (data == null || _disposed) return;
-            // Check transport under lock to avoid race with disconnect
-            lock (connectionLock) { if (!running || transport == null) return; }
+            // Check transport under lock and capture reference to avoid TOCTOU race
+            IRadioAudioTransport xport;
+            lock (connectionLock) { if (!running || transport == null) return; xport = transport; }
 
             byte[] pcmData = null;
             bool playLocally = false;
@@ -198,12 +199,15 @@ namespace HTCommander
             try
             {
                 _recorder?.Dispose();
-                _recorder = null;
                 Debug("Recording stopped.");
             }
             catch (Exception ex)
             {
                 Debug($"Error stopping recording: {ex.Message}");
+            }
+            finally
+            {
+                _recorder = null;
             }
         }
 
@@ -371,15 +375,15 @@ namespace HTCommander
                         continue;
                     }
 
-                    accumulator.Write(receiveBuffer, 0, bytesRead);
-
-                    if (accumulator.Length > MaxAccumulatorSize)
+                    if (accumulator.Length + bytesRead > MaxAccumulatorSize)
                     {
                         Debug("Audio accumulator overflow, clearing.");
                         accumulator.SetLength(0);
                         accumulator.Position = 0;
                         continue;
                     }
+
+                    accumulator.Write(receiveBuffer, 0, bytesRead);
 
                     // Extract and process framed audio data
                     byte[] frame;

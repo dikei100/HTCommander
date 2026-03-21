@@ -296,6 +296,11 @@ namespace HTCommander
                                 int firstColon = regValue.IndexOf(':', 7); // Start after "~~JSON:"
                                 if (firstColon > 0)
                                 {
+                                    // Validate stored type name matches requested type to prevent unsafe deserialization
+                                    string storedTypeName = regValue.Substring(7, firstColon - 7);
+                                    string expectedTypeName = GetSerializableTypeName(typeof(T));
+                                    if (storedTypeName != expectedTypeName) return defaultValue;
+
                                     string json = regValue.Substring(firstColon + 1);
                                     T deserializedValue = JsonSerializer.Deserialize<T>(json);
                                     if (deserializedValue != null)

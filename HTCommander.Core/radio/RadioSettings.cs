@@ -98,6 +98,7 @@ namespace HTCommander
 
         public RadioSettings(byte[] msg)
         {
+            // Minimum 25 bytes required: bytes[5..16] for bitfield settings + bytes[17..24] for vfo1/vfo2_mod_freq_x (2x GetInt at offset 17 and 21)
             if (msg == null || msg.Length < 25) throw new ArgumentException("RadioSettings message too short (need >= 25 bytes)");
             rawData = msg;
 

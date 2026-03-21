@@ -549,7 +549,15 @@ namespace HTCommander
             }
             
             byte lengthByte = data[1];
-            int dataLength = lengthByte == 0 ? 256 : lengthByte;
+            int dataLength = lengthByte == 0 ? 256 : (int)lengthByte;
+
+            // Validate data length against actual packet size before any access
+            int minRequired = useChecksumForTransfer ? (dataLength + 3) : (dataLength + 2);
+            if (data.Length < minRequired)
+            {
+                CancelTransfer("Data packet too short for declared length");
+                return;
+            }
             
             byte[] packetData;
             

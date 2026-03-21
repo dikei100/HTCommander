@@ -147,6 +147,8 @@ namespace HTCommander.Platform.Linux
                         int bytesRead = NativeMethods.read(rfcommFd, ptr, count);
                         if (bytesRead > 0)
                         {
+                            // Clamp to requested count to prevent buffer overrun
+                            if (bytesRead > count) bytesRead = count;
                             Marshal.Copy(ptr, buffer, offset, bytesRead);
                             return bytesRead;
                         }

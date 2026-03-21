@@ -82,10 +82,10 @@ namespace HTCommander.Desktop.Dialogs
                 TitleText.Text = "Error";
                 VersionInfo.Text = "Connection timed out. Please check your internet connection.";
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 TitleText.Text = "Error";
-                VersionInfo.Text = $"Could not check for updates: {ex.Message}";
+                VersionInfo.Text = "Could not check for updates. Please check your internet connection and try again.";
             }
         }
 

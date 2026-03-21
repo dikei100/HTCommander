@@ -234,6 +234,8 @@ namespace HTCommander
             }
         }
 
+        private const int MaxHeaderLineSize = 8192; // 8KB max per header line
+
         private async Task<HttpRequest> ReadHttpRequestAsync(Stream stream, CancellationToken ct)
         {
             // Read headers (line by line until empty line)
@@ -241,6 +243,7 @@ namespace HTCommander
             byte prev = 0;
             int consecutive = 0;
             int totalRead = 0;
+            int lineLength = 0;
 
             // Read byte-by-byte until we find \r\n\r\n
             byte[] singleByte = new byte[1];
@@ -251,17 +254,22 @@ namespace HTCommander
 
                 headerBytes.Add(singleByte[0]);
                 totalRead++;
+                lineLength++;
 
                 // Detect \r\n\r\n
                 if (singleByte[0] == '\n' && prev == '\r')
                 {
                     consecutive++;
+                    lineLength = 0; // Reset line length on newline
                     if (consecutive >= 2) break;
                 }
                 else if (singleByte[0] != '\r')
                 {
                     consecutive = 0;
                 }
+
+                // Reject excessively long header lines
+                if (lineLength > MaxHeaderLineSize) return null;
 
                 prev = singleByte[0];
             }
@@ -409,9 +417,9 @@ namespace HTCommander
             {
                 foreach (var kvp in response.Headers)
                 {
-                    // Sanitize header values to prevent header injection via CRLF
-                    string safeKey = kvp.Key.Replace("\r", "").Replace("\n", "");
-                    string safeValue = kvp.Value.Replace("\r", "").Replace("\n", "");
+                    // Sanitize header values to prevent header injection via CRLF and null bytes
+                    string safeKey = kvp.Key.Replace("\r", "").Replace("\n", "").Replace("\0", "");
+                    string safeValue = kvp.Value.Replace("\r", "").Replace("\n", "").Replace("\0", "");
                     sb.Append(safeKey);
                     sb.Append(": ");
                     sb.Append(safeValue);

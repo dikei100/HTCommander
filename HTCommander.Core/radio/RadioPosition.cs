@@ -65,18 +65,18 @@ namespace HTCommander.radio
             {
                 if (msg.Length < 11) throw new ArgumentException("RadioPosition SUCCESS message too short (need >= 11 bytes)");
                 ReceivedTime = DateTime.Now;
-                LatitudeRaw = (msg[5] << 16) + (msg[6] << 8) + msg[7];
-                LongitudeRaw = (msg[8] << 16) + (msg[9] << 8) + msg[10];
+                LatitudeRaw = (msg[5] << 16) | (msg[6] << 8) | msg[7];
+                LongitudeRaw = (msg[8] << 16) | (msg[9] << 8) | msg[10];
                 LatitudeStr = ConvertLatitudeToDms(LatitudeRaw);
                 LongitudeStr = ConvertLatitudeToDms(LongitudeRaw);
                 Latitude = ConvertLatitude(LatitudeRaw);
                 Longitude = ConvertLatitude(LongitudeRaw);
                 if (msg.Length >= 23)
                 {
-                    Altitude = (msg[11] << 8) + msg[12];
-                    Speed = (msg[13] << 8) + msg[14];
-                    Heading = (msg[15] << 8) + msg[16];
-                    TimeRaw = (msg[17] << 24) + (msg[18] << 16) + (msg[19] << 8) + msg[20];
+                    Altitude = (msg[11] << 8) | msg[12];
+                    Speed = (msg[13] << 8) | msg[14];
+                    Heading = (msg[15] << 8) | msg[16];
+                    TimeRaw = (msg[17] << 24) | (msg[18] << 16) | (msg[19] << 8) | msg[20];
                     TimeUTC = UnixTimeStampToDateTime(TimeRaw);
                     Time = UnixTimeStampToLocalDateTime(TimeRaw);
                     Accuracy = (msg[21] << 8) + msg[22];

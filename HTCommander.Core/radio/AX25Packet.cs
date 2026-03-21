@@ -100,6 +100,7 @@ namespace HTCommander
             List<AX25Address> addresses = new List<AX25Address>();
             do
             {
+                if (i + 7 > data.Length) return null; // Not enough bytes for next address
                 bool last;
                 AX25Address addr = AX25Address.DecodeAX25Address(data, i, out last);
                 if (addr == null) return null;

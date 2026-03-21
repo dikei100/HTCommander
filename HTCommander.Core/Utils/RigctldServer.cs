@@ -444,16 +444,16 @@ namespace HTCommander
 
         private async Task ReceiveLoopAsync()
         {
-            var reader = new StreamReader(stream, Encoding.ASCII);
             var writer = new StreamWriter(stream, Encoding.ASCII) { AutoFlush = true };
 
             try
             {
+                // Use a length-limited line reader to prevent unbounded memory allocation
+                // from oversized lines (ReadLineAsync buffers the entire line first)
                 while (!cts.Token.IsCancellationRequested)
                 {
-                    string line = await reader.ReadLineAsync();
-                    if (line == null) break; // Disconnected
-                    if (line.Length > 1024) break; // Disconnect on oversized commands
+                    string line = await ReadLineLimitedAsync(stream, 1024, cts.Token);
+                    if (line == null) break; // Disconnected or oversized
 
                     string response = server.ProcessCommand(line);
                     if (response == null) break; // quit command
@@ -469,6 +469,26 @@ namespace HTCommander
             catch (Exception) { }
 
             Disconnect();
+        }
+
+        /// <summary>
+        /// Reads a line from the stream with a maximum byte limit to prevent unbounded memory allocation.
+        /// Returns null on disconnect or if the line exceeds maxLength.
+        /// </summary>
+        private static async Task<string> ReadLineLimitedAsync(System.Net.Sockets.NetworkStream stream, int maxLength, CancellationToken ct)
+        {
+            var sb = new System.Text.StringBuilder(128);
+            byte[] buf = new byte[1];
+            while (!ct.IsCancellationRequested)
+            {
+                int read = await stream.ReadAsync(buf, 0, 1, ct);
+                if (read == 0) return sb.Length > 0 ? sb.ToString() : null;
+                char c = (char)buf[0];
+                if (c == '\n') return sb.ToString().TrimEnd('\r');
+                sb.Append(c);
+                if (sb.Length > maxLength) return null; // Oversized — disconnect
+            }
+            return null;
         }
 
         private void Disconnect()

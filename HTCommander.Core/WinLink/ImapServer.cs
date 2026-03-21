@@ -991,7 +991,8 @@ namespace HTCommander
             List<WinLinkMail> mails = GetMailsInMailbox(selectedMailbox);
             for (int i = 0; i < mails.Count; i++)
             {
-                uint uid = (uint)Math.Abs(mails[i].MID.GetHashCode());
+                int hash = mails[i].MID.GetHashCode();
+                uint uid = (hash == int.MinValue) ? (uint)int.MaxValue : (uint)Math.Abs(hash);
                 messageUids[i] = uid;
                 messageFlags[i] = new HashSet<string>();
 
