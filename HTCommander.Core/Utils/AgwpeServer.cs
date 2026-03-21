@@ -264,14 +264,15 @@ namespace HTCommander
                     now.Hour.ToString("D2") + ":" + now.Minute.ToString("D2") + ":" + now.Second.ToString("D2") + "]\r" + p.dataStr;
                 if (!str.EndsWith("\r") && !str.EndsWith("\n")) str += "\r";
 
+                byte[] strBytes = Encoding.ASCII.GetBytes(str);
                 var frame = new AgwpeFrame
                 {
                     Port = 0,
                     DataKind = 0x55, // 'U'
                     CallFrom = p.addresses[1].CallSignWithId,
                     CallTo = p.addresses[0].CallSignWithId,
-                    DataLen = (uint)p.data.Length,
-                    Data = Encoding.ASCII.GetBytes(str)
+                    DataLen = (uint)strBytes.Length,
+                    Data = strBytes
                 };
 
                 BroadcastMonitoringFrame(frame);
@@ -558,8 +559,11 @@ namespace HTCommander
             Task.Run(ReceiveLoopAsync, cts.Token);
         }
 
+        private const int MaxSendQueueSize = 1000;
+
         public void EnqueueSend(byte[] data)
         {
+            if (sendQueue.Count >= MaxSendQueueSize) return; // Drop frames when queue is full
             sendQueue.Enqueue(data);
         }
 

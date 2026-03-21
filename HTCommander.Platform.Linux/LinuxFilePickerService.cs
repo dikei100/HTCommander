@@ -19,32 +19,40 @@ namespace HTCommander.Platform.Linux
     {
         public Task<string> PickFileAsync(string title, string[] filters)
         {
-            return RunZenity($"--file-selection --title=\"{EscapeArg(title)}\"");
+            return RunZenity(title, null, false, false);
         }
 
         public Task<string> SaveFileAsync(string title, string defaultName, string[] filters)
         {
-            string args = $"--file-selection --save --title=\"{EscapeArg(title)}\"";
-            if (!string.IsNullOrEmpty(defaultName))
-                args += $" --filename=\"{EscapeArg(defaultName)}\"";
-            return RunZenity(args);
+            return RunZenity(title, defaultName, true, false);
         }
 
         public Task<string> PickFolderAsync(string title)
         {
-            return RunZenity($"--file-selection --directory --title=\"{EscapeArg(title)}\"");
+            return RunZenity(title, null, false, true);
         }
 
-        private static async Task<string> RunZenity(string args)
+        private static async Task<string> RunZenity(string title, string defaultName, bool save, bool directory)
         {
             try
             {
-                var psi = new ProcessStartInfo("zenity", args)
+                var psi = new ProcessStartInfo("zenity")
                 {
                     RedirectStandardOutput = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                psi.ArgumentList.Add("--file-selection");
+                if (!string.IsNullOrEmpty(title))
+                {
+                    psi.ArgumentList.Add("--title=" + title);
+                }
+                if (save) psi.ArgumentList.Add("--save");
+                if (directory) psi.ArgumentList.Add("--directory");
+                if (!string.IsNullOrEmpty(defaultName))
+                {
+                    psi.ArgumentList.Add("--filename=" + defaultName);
+                }
 
                 using var process = Process.Start(psi);
                 string result = await process.StandardOutput.ReadToEndAsync();
@@ -58,16 +66,27 @@ namespace HTCommander.Platform.Linux
                 // zenity not available, try kdialog
                 try
                 {
-                    string kdArgs = args.Replace("--file-selection", "--getopenfilename .")
-                        .Replace("--save", "--getsavefilename .")
-                        .Replace("--directory", "--getexistingdirectory .");
-
-                    var psi = new ProcessStartInfo("kdialog", kdArgs)
+                    var psi = new ProcessStartInfo("kdialog")
                     {
                         RedirectStandardOutput = true,
                         UseShellExecute = false,
                         CreateNoWindow = true
                     };
+
+                    if (directory)
+                        psi.ArgumentList.Add("--getexistingdirectory");
+                    else if (save)
+                        psi.ArgumentList.Add("--getsavefilename");
+                    else
+                        psi.ArgumentList.Add("--getopenfilename");
+
+                    psi.ArgumentList.Add(".");
+
+                    if (!string.IsNullOrEmpty(title))
+                    {
+                        psi.ArgumentList.Add("--title");
+                        psi.ArgumentList.Add(title);
+                    }
 
                     using var process = Process.Start(psi);
                     string result = await process.StandardOutput.ReadToEndAsync();
@@ -80,11 +99,6 @@ namespace HTCommander.Platform.Linux
             }
 
             return null;
-        }
-
-        private static string EscapeArg(string arg)
-        {
-            return arg?.Replace("\"", "\\\"") ?? "";
         }
     }
 }

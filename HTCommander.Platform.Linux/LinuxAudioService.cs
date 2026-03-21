@@ -278,14 +278,18 @@ namespace HTCommander.Platform.Linux
             try
             {
                 string format = _bitsPerSample == 16 ? "s16le" : "float32le";
-                var psi = new System.Diagnostics.ProcessStartInfo("parecord",
-                    $"--format={format} --rate={_sampleRate} --channels={_channels} --raw --latency-msec=20")
+                var psi = new System.Diagnostics.ProcessStartInfo("parecord")
                 {
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                psi.ArgumentList.Add("--format=" + format);
+                psi.ArgumentList.Add("--rate=" + _sampleRate);
+                psi.ArgumentList.Add("--channels=" + _channels);
+                psi.ArgumentList.Add("--raw");
+                psi.ArgumentList.Add("--latency-msec=20");
 
                 captureProcess = System.Diagnostics.Process.Start(psi);
                 if (captureProcess == null) return;

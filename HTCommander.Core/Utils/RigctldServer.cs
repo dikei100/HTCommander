@@ -28,6 +28,7 @@ namespace HTCommander
         private DataBrokerClient broker;
         private TcpListener listener;
         private readonly ConcurrentDictionary<Guid, RigctldClientHandler> clients = new ConcurrentDictionary<Guid, RigctldClientHandler>();
+        private const int MaxClients = 10;
         private CancellationTokenSource cts;
         private Task serverTask;
         private int port;
@@ -171,6 +172,12 @@ namespace HTCommander
                 while (!ct.IsCancellationRequested)
                 {
                     TcpClient tcpClient = await listener.AcceptTcpClientAsync();
+                    if (clients.Count >= MaxClients)
+                    {
+                        Log("Rigctld connection rejected: max clients reached");
+                        tcpClient.Close();
+                        continue;
+                    }
                     var handler = new RigctldClientHandler(tcpClient, this);
                     if (clients.TryAdd(handler.Id, handler))
                     {
@@ -411,6 +418,12 @@ namespace HTCommander
             if (clients.TryRemove(clientId, out _))
             {
                 Log($"Rigctld client disconnected: {clientId}");
+                // Release PTT if no clients remain (prevents stuck transmit on disconnect)
+                if (pttActive && clients.IsEmpty)
+                {
+                    Log("Rigctld: releasing PTT (last client disconnected)");
+                    SetPtt(false);
+                }
             }
         }
 

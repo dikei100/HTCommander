@@ -5,6 +5,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 */
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.WebSockets;
 using System.Security.Cryptography.X509Certificates;
@@ -157,10 +158,14 @@ namespace HTCommander
                     }
                 }
 
-                string json = "{\"mcpPort\":" + mcpPort +
-                              ",\"mcpEnabled\":" + (mcpEnabled == 1 ? "true" : "false") +
-                              ",\"tlsEnabled\":" + (tlsEnabled ? "true" : "false") +
-                              (string.IsNullOrEmpty(mcpToken) ? "" : ",\"mcpToken\":\"" + mcpToken.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"") + "}";
+                var configObj = new Dictionary<string, object>
+                {
+                    ["mcpPort"] = mcpPort,
+                    ["mcpEnabled"] = mcpEnabled == 1,
+                    ["tlsEnabled"] = tlsEnabled
+                };
+                if (!string.IsNullOrEmpty(mcpToken)) configObj["mcpToken"] = mcpToken;
+                string json = System.Text.Json.JsonSerializer.Serialize(configObj);
                 var resp = new TlsHttpServer.HttpResponse
                 {
                     StatusCode = 200,
@@ -193,7 +198,7 @@ namespace HTCommander
             // Ensure path stays within web root
             string fullPath = Path.GetFullPath(filePath);
             string fullWebRoot = Path.GetFullPath(webRoot);
-            if (!fullPath.StartsWith(fullWebRoot, StringComparison.OrdinalIgnoreCase))
+            if (!fullPath.StartsWith(fullWebRoot, StringComparison.Ordinal))
             {
                 return new TlsHttpServer.HttpResponse(403, "403 - Forbidden");
             }

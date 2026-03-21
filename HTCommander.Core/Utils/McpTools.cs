@@ -719,7 +719,8 @@ namespace HTCommander
             }
             catch (Exception ex)
             {
-                return MakeToolError("Tool error: " + ex.Message);
+                broker.LogInfo("MCP tool error (" + name + "): " + ex.Message);
+                return MakeToolError("Tool execution failed");
             }
         }
 
@@ -1171,8 +1172,15 @@ namespace HTCommander
 
             var channel = new RadioChannelInfo();
             channel.channel_id = channelIndex;
-            channel.rx_freq = (int)(rxFreqMhz * 1000000);
-            channel.tx_freq = (int)(txFreqMhz * 1000000);
+            // Validate frequency fits in int (max ~2.1 GHz) to prevent integer overflow
+            long rxFreqHz = (long)(rxFreqMhz * 1000000);
+            long txFreqHz = (long)(txFreqMhz * 1000000);
+            if (rxFreqHz <= 0 || rxFreqHz > int.MaxValue)
+                return MakeToolError("RX frequency out of range (must be between 0 and ~2147 MHz)");
+            if (txFreqHz <= 0 || txFreqHz > int.MaxValue)
+                return MakeToolError("TX frequency out of range (must be between 0 and ~2147 MHz)");
+            channel.rx_freq = (int)rxFreqHz;
+            channel.tx_freq = (int)txFreqHz;
             channel.rx_mod = ParseModulation(mod);
             channel.tx_mod = ParseModulation(mod);
             channel.bandwidth = bw == "narrow" ? Radio.RadioBandwidthType.NARROW : Radio.RadioBandwidthType.WIDE;
@@ -1300,7 +1308,7 @@ namespace HTCommander
         // Critical settings that must never be modified via debug tools
         private static readonly HashSet<string> DebugSettingsBlacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "McpApiToken", "McpDebugToolsEnabled", "TlsEnabled"
+            "McpApiToken", "McpDebugToolsEnabled", "TlsEnabled", "ServerBindAll", "WinlinkPassword"
         };
 
         private object CallSetAppSetting(JsonElement args)

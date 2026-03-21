@@ -902,7 +902,11 @@ namespace HTCommander
             {
                 byte[] computedAuth = Utils.ComputeHmacSha256Hash(authKey, Encoding.UTF8.GetBytes(x + hashMsg));
                 string authCodeBase64 = Convert.ToBase64String(computedAuth).Substring(0, 6);
-                if (authCodeBase64Check == authCodeBase64)
+                // Use constant-time comparison to prevent timing attacks
+                byte[] computedBytes = Encoding.UTF8.GetBytes(authCodeBase64);
+                byte[] providedBytes = Encoding.UTF8.GetBytes(authCodeBase64Check);
+                if (computedBytes.Length == providedBytes.Length &&
+                    System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(computedBytes, providedBytes))
                 {
                     return AX25Packet.AuthState.Success; // Verified authentication
                 }

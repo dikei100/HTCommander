@@ -26,6 +26,7 @@ namespace HTCommander
         private readonly ConcurrentDictionary<Guid, WebSocket> clients = new ConcurrentDictionary<Guid, WebSocket>();
         private readonly ConcurrentDictionary<Guid, long> clientLastAudioTime = new ConcurrentDictionary<Guid, long>();
         private const int MaxAudioFramesPerSecond = 200; // Rate limit per client
+        private const int MaxClients = 20; // Maximum concurrent WebSocket audio clients
         private volatile int activeRadioId = -1;
         private Guid? pttOwner = null;
         private Timer pttSilenceTimer;
@@ -145,6 +146,14 @@ namespace HTCommander
                         return;
                     }
                 }
+            }
+
+            if (clients.Count >= MaxClients)
+            {
+                Log("WebSocket client rejected: max clients reached (" + MaxClients + ")");
+                try { await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Too many connections", CancellationToken.None); } catch { }
+                try { ws.Dispose(); } catch { }
+                return;
             }
 
             clients.TryAdd(clientId, ws);

@@ -240,13 +240,15 @@ namespace HTCommander.Platform.Linux
         {
             try
             {
-                var psi = new ProcessStartInfo("sdptool", $"browse {macColon}")
+                var psi = new ProcessStartInfo("sdptool")
                 {
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                psi.ArgumentList.Add("browse");
+                psi.ArgumentList.Add(macColon);
                 using var proc = Process.Start(psi);
                 if (proc != null)
                 {

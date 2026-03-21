@@ -315,13 +315,15 @@ namespace HTCommander.Platform.Linux
             // Try sdptool first (most reliable for RFCOMM channel discovery)
             try
             {
-                var psi = new System.Diagnostics.ProcessStartInfo("sdptool", $"browse {macColon}")
+                var psi = new System.Diagnostics.ProcessStartInfo("sdptool")
                 {
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                psi.ArgumentList.Add("browse");
+                psi.ArgumentList.Add(macColon);
                 using var proc = System.Diagnostics.Process.Start(psi);
                 if (proc != null)
                 {
@@ -347,13 +349,15 @@ namespace HTCommander.Platform.Linux
             // Fallback: try bluetoothctl info to at least confirm SPP UUID is advertised
             try
             {
-                var psi = new System.Diagnostics.ProcessStartInfo("bluetoothctl", $"info {macColon}")
+                var psi = new System.Diagnostics.ProcessStartInfo("bluetoothctl")
                 {
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                psi.ArgumentList.Add("info");
+                psi.ArgumentList.Add(macColon);
                 using var proc = System.Diagnostics.Process.Start(psi);
                 if (proc != null)
                 {

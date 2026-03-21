@@ -29,6 +29,7 @@ namespace HTCommander
         private long cachedFrequencyB = 145500000;
         private volatile int activeRadioId = -1;
         private StringBuilder commandBuffer = new StringBuilder();
+        private readonly object commandBufferLock = new object();
         private bool autoInfo = false;
 
         public CatSerialServer(IPlatformServices platform)
@@ -127,26 +128,30 @@ namespace HTCommander
             if (!running) return;
 
             string text = Encoding.ASCII.GetString(data, 0, length);
-            commandBuffer.Append(text);
 
-            // Prevent unbounded buffer growth
-            if (commandBuffer.Length > 1024)
+            lock (commandBufferLock)
             {
+                commandBuffer.Append(text);
+
+                // Prevent unbounded buffer growth
+                if (commandBuffer.Length > 1024)
+                {
+                    commandBuffer.Clear();
+                    return;
+                }
+
+                // Process complete commands (semicolon-terminated)
+                string buffer = commandBuffer.ToString();
+                int semicolon;
+                while ((semicolon = buffer.IndexOf(';')) >= 0)
+                {
+                    string cmd = buffer.Substring(0, semicolon + 1);
+                    buffer = buffer.Substring(semicolon + 1);
+                    ProcessCommand(cmd.TrimEnd(';'));
+                }
                 commandBuffer.Clear();
-                return;
+                commandBuffer.Append(buffer);
             }
-
-            // Process complete commands (semicolon-terminated)
-            string buffer = commandBuffer.ToString();
-            int semicolon;
-            while ((semicolon = buffer.IndexOf(';')) >= 0)
-            {
-                string cmd = buffer.Substring(0, semicolon + 1);
-                buffer = buffer.Substring(semicolon + 1);
-                ProcessCommand(cmd.TrimEnd(';'));
-            }
-            commandBuffer.Clear();
-            commandBuffer.Append(buffer);
         }
 
         private void ProcessCommand(string cmd)

@@ -131,7 +131,12 @@ namespace HTCommander.AprsParser
             {
                 //string x1 = x + ":" + srcAddress + ":" + aprsAddr + ":" + aprsMessage + "{" + msgId;
                 string authCodeBase64 = Convert.ToBase64String(Utils.ComputeHmacSha256Hash(authKey, UTF8Encoding.UTF8.GetBytes(x + hashMsg))).Substring(0, 12);
-                if (authCodeBase64Check == authCodeBase64) return AuthState.Success; // Verified authentication
+                // Use constant-time comparison to prevent timing attacks
+                byte[] computedBytes = UTF8Encoding.UTF8.GetBytes(authCodeBase64);
+                byte[] providedBytes = UTF8Encoding.UTF8.GetBytes(authCodeBase64Check);
+                if (computedBytes.Length == providedBytes.Length &&
+                    System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(computedBytes, providedBytes))
+                    return AuthState.Success; // Verified authentication
             }
 
             return AuthState.Failed; // Bad auth

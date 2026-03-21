@@ -246,9 +246,19 @@ namespace HTCommander
                         HandleMailFrom(args);
                         break;
                     case "RCPT":
+                        if (!authenticated)
+                        {
+                            SendResponse("530 Authentication required");
+                            break;
+                        }
                         HandleRcptTo(args);
                         break;
                     case "DATA":
+                        if (!authenticated)
+                        {
+                            SendResponse("530 Authentication required");
+                            break;
+                        }
                         HandleData();
                         break;
                     case "RSET":
@@ -273,6 +283,8 @@ namespace HTCommander
         }
 
         private bool authenticated = false;
+        private int authAttempts = 0;
+        private const int MaxAuthAttempts = 5;
 
         private void HandleHelo(string command, string args)
         {
@@ -294,6 +306,14 @@ namespace HTCommander
 
         private void HandleAuth(string args)
         {
+            if (authAttempts >= MaxAuthAttempts)
+            {
+                SendResponse("421 Too many authentication attempts");
+                Close();
+                throw new InvalidOperationException("Max auth attempts exceeded");
+            }
+            authAttempts++;
+
             // AUTH PLAIN <base64> — base64 decodes to \0username\0password
             string[] authParts = args.Split(new[] { ' ' }, 2);
             if (authParts.Length < 2 || !authParts[0].Equals("PLAIN", StringComparison.OrdinalIgnoreCase))

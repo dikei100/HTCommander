@@ -31,7 +31,10 @@ namespace HTCommander
                 {
                     try
                     {
-                        var cert = X509CertificateLoader.LoadPkcs12FromFile(pfxPath, null, X509KeyStorageFlags.EphemeralKeySet);
+                        // Try loading with password first (new format), then without (legacy)
+                        X509Certificate2 cert = null;
+                        try { cert = X509CertificateLoader.LoadPkcs12FromFile(pfxPath, "htcommander-tls-local", X509KeyStorageFlags.EphemeralKeySet); }
+                        catch { cert = X509CertificateLoader.LoadPkcs12FromFile(pfxPath, null, X509KeyStorageFlags.EphemeralKeySet); }
                         if (cert.NotAfter > DateTime.UtcNow)
                         {
                             cachedCert = cert;
@@ -114,8 +117,9 @@ namespace HTCommander
                     DateTimeOffset.UtcNow.AddDays(-1),
                     DateTimeOffset.UtcNow.AddYears(10));
 
-                // Export and re-import to ensure private key is persistable on all platforms
-                byte[] pfxBytes = cert.Export(X509ContentType.Pfx);
+                // Export with a fixed passphrase for on-disk protection (defense-in-depth beyond chmod 600)
+                const string pfxPassword = "htcommander-tls-local";
+                byte[] pfxBytes = cert.Export(X509ContentType.Pfx, pfxPassword);
                 cert.Dispose();
 
                 Directory.CreateDirectory(Path.GetDirectoryName(pfxPath));
@@ -124,7 +128,7 @@ namespace HTCommander
                 // Set restrictive file permissions on Linux/macOS (owner-only read/write)
                 try { File.SetUnixFileMode(pfxPath, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch { }
 
-                return X509CertificateLoader.LoadPkcs12(pfxBytes, null, X509KeyStorageFlags.EphemeralKeySet);
+                return X509CertificateLoader.LoadPkcs12(pfxBytes, pfxPassword, X509KeyStorageFlags.EphemeralKeySet);
             }
         }
     }

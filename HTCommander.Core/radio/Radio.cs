@@ -1042,16 +1042,19 @@ namespace HTCommander
                     tag = tag,
                     deadline = deadline
                 };
-                TncFragmentQueue.Add(fragmentInQueue);
+                lock (TncFragmentQueue) { TncFragmentQueue.Add(fragmentInQueue); }
 
                 i += fragmentSize;
                 fragid++;
             }
 
-            if (!TncFragmentInFlight && TncFragmentQueue.Count > 0 && HtStatus != null && HtStatus.rssi == 0 && !HtStatus.is_in_tx)
+            lock (TncFragmentQueue)
             {
-                TncFragmentInFlight = true;
-                SendCommand(RadioCommandGroup.BASIC, RadioBasicCommand.HT_SEND_DATA, TncFragmentQueue[0].fragment);
+                if (!TncFragmentInFlight && TncFragmentQueue.Count > 0 && HtStatus != null && HtStatus.rssi == 0 && !HtStatus.is_in_tx)
+                {
+                    TncFragmentInFlight = true;
+                    SendCommand(RadioCommandGroup.BASIC, RadioBasicCommand.HT_SEND_DATA, TncFragmentQueue[0].fragment);
+                }
             }
         }
 
@@ -1194,7 +1197,7 @@ namespace HTCommander
                     HandleReadRfChannel(value);
                     break;
                 case RadioBasicCommand.WRITE_RF_CH:
-                    if (value[4] == 0) SendCommand(RadioCommandGroup.BASIC, RadioBasicCommand.READ_RF_CH, value[5]);
+                    if (value.Length >= 6 && value[4] == 0) SendCommand(RadioCommandGroup.BASIC, RadioBasicCommand.READ_RF_CH, value[5]);
                     break;
                 case RadioBasicCommand.READ_BSS_SETTINGS:
                     BssSettings = new RadioBssSettings(value);
@@ -1220,7 +1223,7 @@ namespace HTCommander
                 case RadioBasicCommand.SET_VOLUME:
                     break;
                 case RadioBasicCommand.GET_VOLUME:
-                    broker.Dispatch(DeviceId, "Volume", value[5], store: true);
+                    if (value.Length >= 6) broker.Dispatch(DeviceId, "Volume", value[5], store: true);
                     break;
                 case RadioBasicCommand.WRITE_SETTINGS:
                     if (value[4] != 0) Debug("WRITE_SETTINGS ERROR: " + Utils.BytesToHex(value));
@@ -1373,6 +1376,7 @@ namespace HTCommander
 
         private void HandleReadStatus(byte[] value)
         {
+            if (value.Length < 8) { Debug("READ_STATUS response too short"); return; }
             RadioPowerStatus powerStatus = (RadioPowerStatus)Utils.GetShort(value, 5);
             switch (powerStatus)
             {
@@ -1404,52 +1408,55 @@ namespace HTCommander
         private void HandleHtSendDataResponse(byte[] value)
         {
             ClearTransmitQueue();
-            if (TncFragmentQueue.Count == 0) { TncFragmentInFlight = false; return; }
-
-            bool channelFree = IsTncFree();
-            RadioCommandState errorCode = (RadioCommandState)value[4];
-
-            if (errorCode == RadioCommandState.INCORRECT_STATE)
+            lock (TncFragmentQueue)
             {
-                if (TncFragmentQueue[0].fragid == 0)
+                if (TncFragmentQueue.Count == 0) { TncFragmentInFlight = false; return; }
+
+                bool channelFree = IsTncFree();
+                RadioCommandState errorCode = (RadioCommandState)value[4];
+
+                if (errorCode == RadioCommandState.INCORRECT_STATE)
                 {
-                    if (channelFree)
+                    if (TncFragmentQueue[0].fragid == 0)
                     {
-                        TncFragmentInFlight = true;
-                        Debug("TNC Fragment failed, TRYING AGAIN.");
-                        SendCommand(RadioCommandGroup.BASIC, RadioBasicCommand.HT_SEND_DATA, TncFragmentQueue[0].fragment);
+                        if (channelFree)
+                        {
+                            TncFragmentInFlight = true;
+                            Debug("TNC Fragment failed, TRYING AGAIN.");
+                            SendCommand(RadioCommandGroup.BASIC, RadioBasicCommand.HT_SEND_DATA, TncFragmentQueue[0].fragment);
+                        }
+                        else
+                        {
+                            TncFragmentInFlight = false;
+                        }
+                        return;
                     }
                     else
                     {
-                        TncFragmentInFlight = false;
+                        Debug("TNC Fragment failed, check Bluetooth connection.");
+                        while (TncFragmentQueue.Count > 0 && !TncFragmentQueue[0].isLast) TncFragmentQueue.RemoveAt(0);
+                        if (TncFragmentQueue.Count > 0) TncFragmentQueue.RemoveAt(0);
                     }
-                    return;
                 }
                 else
                 {
-                    Debug("TNC Fragment failed, check Bluetooth connection.");
-                    while (TncFragmentQueue.Count > 0 && !TncFragmentQueue[0].isLast) TncFragmentQueue.RemoveAt(0);
-                    if (TncFragmentQueue.Count > 0) TncFragmentQueue.RemoveAt(0);
+                    TncFragmentQueue.RemoveAt(0);
                 }
-            }
-            else
-            {
-                TncFragmentQueue.RemoveAt(0);
-            }
 
-            // Continue sending if more fragments available
-            if (TncFragmentQueue.Count > 0 && (TncFragmentQueue[0].fragid != 0 || channelFree))
-            {
-                channelFree = false;
-                TncFragmentInFlight = true;
-                SendCommand(RadioCommandGroup.BASIC, RadioBasicCommand.HT_SEND_DATA, TncFragmentQueue[0].fragment);
-            }
-            else
-            {
-                TncFragmentInFlight = false;
-            }
+                // Continue sending if more fragments available
+                if (TncFragmentQueue.Count > 0 && (TncFragmentQueue[0].fragid != 0 || channelFree))
+                {
+                    channelFree = false;
+                    TncFragmentInFlight = true;
+                    SendCommand(RadioCommandGroup.BASIC, RadioBasicCommand.HT_SEND_DATA, TncFragmentQueue[0].fragment);
+                }
+                else
+                {
+                    TncFragmentInFlight = false;
+                }
 
-            ChannelState(channelFree);
+                ChannelState(channelFree);
+            }
         }
 
         private void HandleGetHtStatus(byte[] value)
@@ -1481,15 +1488,18 @@ namespace HTCommander
             ClearTransmitQueue();
             bool channelFree = IsTncFree();
 
-            if (channelFree && !TncFragmentInFlight && TncFragmentQueue.Count > 0)
+            lock (TncFragmentQueue)
             {
-                channelFree = false;
-                TncFragmentInFlight = true;
-                SendCommand(RadioCommandGroup.BASIC, RadioBasicCommand.HT_SEND_DATA, TncFragmentQueue[0].fragment);
-            }
-            else if (TncFragmentInFlight && HtStatus.is_in_rx)
-            {
-                TncFragmentInFlight = false;
+                if (channelFree && !TncFragmentInFlight && TncFragmentQueue.Count > 0)
+                {
+                    channelFree = false;
+                    TncFragmentInFlight = true;
+                    SendCommand(RadioCommandGroup.BASIC, RadioBasicCommand.HT_SEND_DATA, TncFragmentQueue[0].fragment);
+                }
+                else if (TncFragmentInFlight && HtStatus.is_in_rx)
+                {
+                    TncFragmentInFlight = false;
+                }
             }
 
             ChannelState(channelFree);
