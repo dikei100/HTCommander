@@ -47,6 +47,8 @@ All four files are in `HTCommander.Core/Utils/`:
 
 | Tool | Description | DataBroker Dispatch |
 |------|-------------|---------------------|
+| `connect_radio` | Connect to a radio by MAC address (or last used) | `Dispatch(1, "McpConnectRadio", macAddress)` |
+| `disconnect_radio` | Disconnect a connected radio by device ID | `Dispatch(1, "McpDisconnectRadio", deviceId)` |
 | `set_vfo_channel` | Switch VFO A or B to a memory channel by index | `Dispatch(deviceId, "ChannelChangeVfoA"/"ChannelChangeVfoB", channelIndex)` |
 | `set_volume` | Set hardware volume (0-15) | `Dispatch(deviceId, "SetVolumeLevel", level)` |
 | `set_squelch` | Set squelch level (0-9) | `Dispatch(deviceId, "SetSquelchLevel", level)` |

@@ -40,6 +40,8 @@ No test projects exist in this codebase.
 
 GitHub Actions workflow (`.github/workflows/release.yml`) triggers on version tags (`v*`). Builds Linux and Windows self-contained packages on `ubuntu-latest`, produces: AppImage, .deb, .rpm, .pkg.tar.zst, and Windows zip. All artifacts are uploaded as a GitHub Release with auto-generated notes.
 
+**Versioning**: The assembly version is set in `HTCommander.Desktop/HTCommander.Desktop.csproj` `<Version>` property. This must match the git tag (e.g., tag `v0.1.4` → `<Version>0.1.4</Version>`). The About dialog and update checker both read `Assembly.GetEntryAssembly().GetName().Version`. Push to the `fork` remote (dikei100/HTCommander-X) with `--tags` to trigger a release build.
+
 ## Architecture
 
 HTCommander is a ham radio controller for Bluetooth-enabled handhelds (UV-Pro, UV-50Pro, GA-5WB, VR-N75, VR-N76, VR-N7500, VR-N7600, RT-660). It was migrated from a monolithic WinForms app to a multi-project cross-platform architecture.

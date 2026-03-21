@@ -93,7 +93,7 @@ claude mcp add htcommander --url http://localhost:5678/
 | Category | Tools |
 |----------|-------|
 | Radio Queries | `get_connected_radios`, `get_radio_state`, `get_radio_info`, `get_radio_settings`, `get_channels`, `get_gps_position`, `get_battery` |
-| Radio Control | `set_vfo_channel`, `set_volume`, `set_squelch`, `set_audio`, `set_gps`, `send_chat_message` |
+| Radio Control | `connect_radio`, `disconnect_radio`, `set_vfo_channel`, `set_volume`, `set_squelch`, `set_audio`, `set_gps`, `send_chat_message` |
 | Debug (opt-in) | `get_logs`, `get_databroker_state`, `get_app_setting`, `set_app_setting`, `dispatch_event` |
 
 **Claude Code Skills:**
