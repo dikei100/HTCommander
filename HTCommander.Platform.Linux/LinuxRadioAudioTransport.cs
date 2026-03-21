@@ -26,6 +26,9 @@ namespace HTCommander.Platform.Linux
         private bool _disposed = false;
 
         private const string GENERIC_AUDIO_UUID = "00001203-0000-1000-8000-00805f9b34fb";
+        private const int NativeBufferSize = 4096;
+        private IntPtr _readPtr = IntPtr.Zero;
+        private IntPtr _writePtr = IntPtr.Zero;
 
         private DataBrokerClient logBroker;
 
@@ -120,6 +123,10 @@ namespace HTCommander.Platform.Linux
                 int flags = NativeMethods.fcntl(rfcommFd, 3 /* F_GETFL */, 0);
                 NativeMethods.fcntl(rfcommFd, 4 /* F_SETFL */, flags | 0x800 /* O_NONBLOCK */);
 
+                // Pre-allocate native buffers for read/write to avoid per-call AllocHGlobal
+                _readPtr = Marshal.AllocHGlobal(NativeBufferSize);
+                _writePtr = Marshal.AllocHGlobal(NativeBufferSize);
+
                 _isConnected = true;
                 Debug("Audio transport connected successfully");
                 return true;
@@ -141,39 +148,34 @@ namespace HTCommander.Platform.Linux
             {
                 while (!cancellationToken.IsCancellationRequested && _isConnected)
                 {
-                    IntPtr ptr = Marshal.AllocHGlobal(count);
-                    try
+                    int readSize = Math.Min(count, NativeBufferSize);
+                    int bytesRead = NativeMethods.read(rfcommFd, _readPtr, readSize);
+                    if (bytesRead > 0)
                     {
-                        int bytesRead = NativeMethods.read(rfcommFd, ptr, count);
-                        if (bytesRead > 0)
-                        {
-                            // Clamp to requested count to prevent buffer overrun
-                            if (bytesRead > count) bytesRead = count;
-                            Marshal.Copy(ptr, buffer, offset, bytesRead);
-                            return bytesRead;
-                        }
-                        else if (bytesRead == 0)
-                        {
-                            // Connection closed
-                            _isConnected = false;
-                            return 0;
-                        }
-                        else
-                        {
-                            int errno = Marshal.GetLastWin32Error();
-                            if (errno == 11 || errno == 35) // EAGAIN / EWOULDBLOCK
-                            {
-                                Thread.Sleep(10);
-                                continue;
-                            }
-                            // Real error
-                            _isConnected = false;
-                            return 0;
-                        }
+                        // Clamp to requested count and buffer bounds to prevent overrun
+                        if (bytesRead > readSize) bytesRead = readSize;
+                        if (offset + bytesRead > buffer.Length) bytesRead = buffer.Length - offset;
+                        if (bytesRead <= 0) return 0;
+                        Marshal.Copy(_readPtr, buffer, offset, bytesRead);
+                        return bytesRead;
                     }
-                    finally
+                    else if (bytesRead == 0)
                     {
-                        Marshal.FreeHGlobal(ptr);
+                        // Connection closed
+                        _isConnected = false;
+                        return 0;
+                    }
+                    else
+                    {
+                        int errno = Marshal.GetLastWin32Error();
+                        if (errno == 11 || errno == 35) // EAGAIN / EWOULDBLOCK
+                        {
+                            Thread.Sleep(10);
+                            continue;
+                        }
+                        // Real error
+                        _isConnected = false;
+                        return 0;
                     }
                 }
                 return 0;
@@ -189,30 +191,23 @@ namespace HTCommander.Platform.Linux
                 int totalWritten = 0;
                 while (totalWritten < count && !cancellationToken.IsCancellationRequested && _isConnected)
                 {
-                    IntPtr ptr = Marshal.AllocHGlobal(count - totalWritten);
-                    try
+                    int chunkSize = Math.Min(count - totalWritten, NativeBufferSize);
+                    Marshal.Copy(buffer, offset + totalWritten, _writePtr, chunkSize);
+                    int written = NativeMethods.write(rfcommFd, _writePtr, chunkSize);
+                    if (written > 0)
                     {
-                        Marshal.Copy(buffer, offset + totalWritten, ptr, count - totalWritten);
-                        int written = NativeMethods.write(rfcommFd, ptr, count - totalWritten);
-                        if (written > 0)
-                        {
-                            totalWritten += written;
-                        }
-                        else if (written < 0)
-                        {
-                            int errno = Marshal.GetLastWin32Error();
-                            if (errno == 11 || errno == 35) // EAGAIN
-                            {
-                                Thread.Sleep(5);
-                                continue;
-                            }
-                            _isConnected = false;
-                            break;
-                        }
+                        totalWritten += written;
                     }
-                    finally
+                    else if (written < 0)
                     {
-                        Marshal.FreeHGlobal(ptr);
+                        int errno = Marshal.GetLastWin32Error();
+                        if (errno == 11 || errno == 35) // EAGAIN
+                        {
+                            Thread.Sleep(5);
+                            continue;
+                        }
+                        _isConnected = false;
+                        break;
                     }
                 }
             }, cancellationToken);
@@ -232,6 +227,8 @@ namespace HTCommander.Platform.Linux
                 try { NativeMethods.close(rfcommFd); } catch (Exception) { }
                 rfcommFd = -1;
             }
+            if (_readPtr != IntPtr.Zero) { Marshal.FreeHGlobal(_readPtr); _readPtr = IntPtr.Zero; }
+            if (_writePtr != IntPtr.Zero) { Marshal.FreeHGlobal(_writePtr); _writePtr = IntPtr.Zero; }
         }
 
         public void OnPause() { }
@@ -251,7 +248,7 @@ namespace HTCommander.Platform.Linux
                 using var proc = Process.Start(psi);
                 if (proc != null)
                 {
-                    string output = await proc.StandardOutput.ReadToEndAsync();
+                    string output = await ReadProcessOutputLimited(proc.StandardOutput, 512 * 1024);
                     proc.WaitForExit(10000);
 
                     if (proc.ExitCode == 0 && !string.IsNullOrEmpty(output))
@@ -267,6 +264,21 @@ namespace HTCommander.Platform.Linux
             }
 
             return null;
+        }
+
+        private static async Task<string> ReadProcessOutputLimited(System.IO.StreamReader reader, int maxBytes)
+        {
+            var sb = new System.Text.StringBuilder();
+            char[] buf = new char[4096];
+            int totalRead = 0;
+            int read;
+            while ((read = await reader.ReadAsync(buf, 0, buf.Length)) > 0)
+            {
+                totalRead += read;
+                if (totalRead > maxBytes) { sb.Append(buf, 0, read - (totalRead - maxBytes)); break; }
+                sb.Append(buf, 0, read);
+            }
+            return sb.ToString();
         }
 
         private List<int> ParseSdptoolOutputForAudio(string output)

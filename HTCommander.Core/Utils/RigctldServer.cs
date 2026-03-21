@@ -479,9 +479,12 @@ namespace HTCommander
         {
             var sb = new System.Text.StringBuilder(128);
             byte[] buf = new byte[1];
-            while (!ct.IsCancellationRequested)
+            // Idle timeout: disconnect clients that stall without sending data
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(30000); // 30 second idle timeout
+            while (!timeoutCts.Token.IsCancellationRequested)
             {
-                int read = await stream.ReadAsync(buf, 0, 1, ct);
+                int read = await stream.ReadAsync(buf, 0, 1, timeoutCts.Token);
                 if (read == 0) return sb.Length > 0 ? sb.ToString() : null;
                 char c = (char)buf[0];
                 if (c == '\n') return sb.ToString().TrimEnd('\r');

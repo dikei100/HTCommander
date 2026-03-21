@@ -806,6 +806,7 @@ namespace HTCommander
             foreach (var attachment in mail.Attachments)
             {
                 if (attachment.Data == null) continue;
+                if (attachment.Data.Length > MaxAttachmentSize) continue; // Skip oversized attachments
                 string filePath = GetAttachmentFilePath(mail.MID, attachment.Name);
                 File.WriteAllBytes(filePath, attachment.Data);
             }
@@ -863,11 +864,17 @@ namespace HTCommander
             }
         }
 
+        private const int MaxAttachmentSize = 10 * 1024 * 1024; // 10MB per attachment
+
         private string GetAttachmentFilePath(string mid, string filename)
         {
             // Sanitize filename to remove invalid characters
             string safeName = string.Join("_", filename.Split(Path.GetInvalidFileNameChars()));
-            return Path.Combine(_attachmentsPath, $"{mid}_{safeName}");
+            string fullPath = Path.GetFullPath(Path.Combine(_attachmentsPath, $"{mid}_{safeName}"));
+            // Validate resolved path stays within attachments directory
+            if (!fullPath.StartsWith(_attachmentsPath + Path.DirectorySeparatorChar) && fullPath != _attachmentsPath)
+                throw new ArgumentException("Invalid attachment path");
+            return fullPath;
         }
 
         public void Dispose()

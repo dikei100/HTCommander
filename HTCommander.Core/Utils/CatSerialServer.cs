@@ -175,7 +175,7 @@ namespace HTCommander
             else if (cmd.StartsWith("FA") && cmd.Length > 2)
             {
                 long freq;
-                if (long.TryParse(cmd.Substring(2), out freq) && freq > 0)
+                if (long.TryParse(cmd.Substring(2), out freq) && freq > 0 && freq <= 99999999999)
                 {
                     cachedFrequencyA = freq;
                     SetRadioFrequency(freq, "A");
@@ -190,7 +190,7 @@ namespace HTCommander
             else if (cmd.StartsWith("FB") && cmd.Length > 2)
             {
                 long freq;
-                if (long.TryParse(cmd.Substring(2), out freq) && freq > 0)
+                if (long.TryParse(cmd.Substring(2), out freq) && freq > 0 && freq <= 99999999999)
                 {
                     cachedFrequencyB = freq;
                     SetRadioFrequency(freq, "B");

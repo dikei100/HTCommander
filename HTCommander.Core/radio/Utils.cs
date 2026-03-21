@@ -177,11 +177,24 @@ namespace HTCommander
 
         public static byte[] DecompressBrotli(byte[] compressedData) => DecompressBrotli(compressedData, 0, compressedData.Length);
 
+        private const int MaxDecompressedSize = 100 * 1024 * 1024; // 100MB decompression limit
+
         public static byte[] DecompressBrotli(byte[] compressedData, int index, int length)
         {
             using (var input = new MemoryStream(compressedData, index, length))
             using (var brotli = new BrotliStream(input, CompressionMode.Decompress))
-            using (var output = new MemoryStream()) { brotli.CopyTo(output); return output.ToArray(); }
+            using (var output = new MemoryStream())
+            {
+                byte[] buf = new byte[65536];
+                int read;
+                while ((read = brotli.Read(buf, 0, buf.Length)) > 0)
+                {
+                    output.Write(buf, 0, read);
+                    if (output.Length > MaxDecompressedSize)
+                        throw new InvalidOperationException("Decompressed data exceeds size limit");
+                }
+                return output.ToArray();
+            }
         }
 
         static public byte[] CompressDeflate(byte[] data)
@@ -199,7 +212,18 @@ namespace HTCommander
         {
             using (var input = new MemoryStream(compressedData, index, length))
             using (var output = new MemoryStream())
-            using (var dstream = new DeflateStream(input, CompressionMode.Decompress)) { dstream.CopyTo(output); return output.ToArray(); }
+            using (var dstream = new DeflateStream(input, CompressionMode.Decompress))
+            {
+                byte[] buf = new byte[65536];
+                int read;
+                while ((read = dstream.Read(buf, 0, buf.Length)) > 0)
+                {
+                    output.Write(buf, 0, read);
+                    if (output.Length > MaxDecompressedSize)
+                        throw new InvalidOperationException("Decompressed data exceeds size limit");
+                }
+                return output.ToArray();
+            }
         }
 
         public static byte[] ComputeShortSha256Hash(byte[] rawData)

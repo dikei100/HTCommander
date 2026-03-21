@@ -325,7 +325,7 @@ namespace HTCommander.Platform.Linux
                 using var proc = System.Diagnostics.Process.Start(psi);
                 if (proc != null)
                 {
-                    string output = await proc.StandardOutput.ReadToEndAsync();
+                    string output = await ReadProcessOutputLimited(proc.StandardOutput, 512 * 1024);
                     proc.WaitForExit(10000);
 
                     if (proc.ExitCode == 0 && !string.IsNullOrEmpty(output))
@@ -357,7 +357,7 @@ namespace HTCommander.Platform.Linux
                 using var proc = System.Diagnostics.Process.Start(psi);
                 if (proc != null)
                 {
-                    string output = await proc.StandardOutput.ReadToEndAsync();
+                    string output = await ReadProcessOutputLimited(proc.StandardOutput, 512 * 1024);
                     proc.WaitForExit(5000);
 
                     if (output.Contains("00001101-0000-1000-8000-00805f9b34fb"))
@@ -374,6 +374,24 @@ namespace HTCommander.Platform.Linux
             catch (Exception) { }
 
             return null;
+        }
+
+        /// <summary>
+        /// Reads subprocess output with a size limit to prevent unbounded memory allocation.
+        /// </summary>
+        private static async System.Threading.Tasks.Task<string> ReadProcessOutputLimited(System.IO.StreamReader reader, int maxBytes)
+        {
+            var sb = new System.Text.StringBuilder();
+            char[] buf = new char[4096];
+            int totalRead = 0;
+            int read;
+            while ((read = await reader.ReadAsync(buf, 0, buf.Length)) > 0)
+            {
+                totalRead += read;
+                if (totalRead > maxBytes) { sb.Append(buf, 0, read - (totalRead - maxBytes)); break; }
+                sb.Append(buf, 0, read);
+            }
+            return sb.ToString();
         }
 
         /// <summary>

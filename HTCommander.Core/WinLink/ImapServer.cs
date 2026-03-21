@@ -914,12 +914,16 @@ namespace HTCommander
             }
         }
 
+        private const int MaxUidSetResults = 10000;
+
         private List<int> ParseUidSet(string uidSet)
         {
             List<int> sequences = new List<int>();
 
             foreach (string part in uidSet.Split(','))
             {
+                if (sequences.Count >= MaxUidSetResults) break;
+
                 if (part.Contains(':'))
                 {
                     string[] range = part.Split(':');
@@ -932,7 +936,7 @@ namespace HTCommander
                     if (range[1] == "*") endUid = uint.MaxValue;
                     else if (!uint.TryParse(range[1], out endUid)) continue;
 
-                    for (int i = 0; i < messageUids.Count; i++)
+                    for (int i = 0; i < messageUids.Count && sequences.Count < MaxUidSetResults; i++)
                     {
                         uint uid = messageUids[i];
                         if (uid >= startUid && uid <= endUid)
@@ -1108,8 +1112,8 @@ namespace HTCommander
 
         private void SendResponse(string tag, string response)
         {
-            // Sanitize tag to prevent IMAP response injection via CRLF
-            string safeTag = tag.Replace("\r", "").Replace("\n", "");
+            // Sanitize tag to prevent IMAP response injection via CRLF and Unicode line separators
+            string safeTag = tag.Replace("\r", "").Replace("\n", "").Replace("\u2028", "").Replace("\u2029", "").Replace("\0", "");
             string line = $"{safeTag} {response}";
             writer.WriteLine(line);
         }

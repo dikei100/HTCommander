@@ -644,6 +644,7 @@ namespace HTCommander
                     if (frame.GetFrameSize() != frameSize) break;
 
                     int pcmBytes = pcmLeft.Length * 2;
+                    if (totalWritten > int.MaxValue - pcmBytes) break; // Integer overflow guard
                     if (totalWritten + pcmBytes > pcmFrame.Length)
                         Array.Resize(ref pcmFrame, totalWritten + pcmBytes);
 

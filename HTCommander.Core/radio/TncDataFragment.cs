@@ -74,10 +74,15 @@ namespace HTCommander
             if (with_channel_id) { channel_id = msg[msg.Length - 1]; } else { channel_id = -1; }
         }
 
+        private const int MaxReassemblySize = 1024 * 1024; // 1MB cap on reassembled fragments
+
         public TncDataFragment Append(TncDataFragment frame)
         {
             if ((frame.fragment_id == fragment_id + 1) && (final_fragment == false))
             {
+                // Reject if merged size would exceed cap
+                if (data.Length + frame.data.Length > MaxReassemblySize) return frame;
+
                 // Merge the data
                 byte[] mergedData = new byte[data.Length + frame.data.Length];
                 Array.Copy(data, 0, mergedData, 0, data.Length);

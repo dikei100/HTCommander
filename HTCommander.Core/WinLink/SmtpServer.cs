@@ -185,8 +185,8 @@ namespace HTCommander
                     lineBuffer.Clear();
                     lineBuffer.Append(bufferedText);
 
-                    // Prevent unbounded buffer growth
-                    if (lineBuffer.Length > 10 * 1024 * 1024) // 10MB matches advertised SIZE
+                    // Prevent unbounded buffer growth (check before next append)
+                    if (lineBuffer.Length > 10 * 1024 * 1024 || dataBuffer.Length > 10 * 1024 * 1024)
                     {
                         SendResponse("552 Too much data");
                         return;

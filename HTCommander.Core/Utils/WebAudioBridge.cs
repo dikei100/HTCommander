@@ -215,10 +215,12 @@ namespace HTCommander
         {
             if (pttOwner != clientId) return;
 
-            // Rate limit: max audio frames per second per client
+            // Rate limit: max audio frames per second per client (minimum 5ms between frames)
             long nowTicks = Environment.TickCount64;
             long lastTicks = clientLastAudioTime.GetOrAdd(clientId, 0);
-            if (nowTicks - lastTicks < (1000 / MaxAudioFramesPerSecond)) return;
+            long minInterval = 1000 / MaxAudioFramesPerSecond;
+            if (minInterval < 1) minInterval = 1;
+            if (nowTicks - lastTicks < minInterval) return;
             clientLastAudioTime[clientId] = nowTicks;
 
             int radioId = activeRadioId;
