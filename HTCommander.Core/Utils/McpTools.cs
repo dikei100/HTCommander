@@ -11,6 +11,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Threading;
+using HTCommander.radio;
 
 namespace HTCommander
 {
@@ -20,11 +22,29 @@ namespace HTCommander
     /// </summary>
     public class McpTools
     {
+        private static readonly string[] SettingsWhitelist = new[]
+        {
+            "CallSign", "StationId", "AllowTransmit", "Theme", "CheckForUpdates",
+            "VoiceLanguage", "Voice", "SpeechToText", "MicGain", "OutputVolume",
+            "ServerBindAll", "WebServerEnabled", "WebServerPort",
+            "McpServerEnabled", "McpServerPort", "McpDebugToolsEnabled",
+            "RigctldServerEnabled", "RigctldServerPort", "CatServerEnabled",
+            "AgwpeServerEnabled", "AgwpeServerPort", "VirtualAudioEnabled",
+            "WinlinkPassword", "WinlinkUseStationId",
+            "AirplaneServer", "RepeaterBookCountry", "RepeaterBookState",
+            "ShowAllChannels", "ShowAirplanesOnMap", "SoftwareModemMode",
+            "AudioOutputDevice", "AudioInputDevice"
+        };
+
         private readonly DataBrokerClient broker;
+        private bool mcpPttActive = false;
+        private Timer mcpPttSilenceTimer;
+        private int activeRadioId = -1;
 
         public McpTools(DataBrokerClient broker)
         {
             this.broker = broker;
+            broker.Subscribe(1, "ConnectedRadios", (d, n, data) => { activeRadioId = GetFirstConnectedRadioId(); });
         }
 
         /// <summary>
@@ -273,6 +293,293 @@ namespace HTCommander
                 }
             });
 
+            // Extended radio control tools
+            tools.Add(new McpToolDefinition
+            {
+                Name = "set_vfo_frequency",
+                Description = "Tune VFO A or B to an arbitrary frequency using a scratch channel. This writes a temporary channel and switches the VFO to it.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["device_id"] = new McpToolProperty { Type = "integer", Description = "Radio device ID (100+)" },
+                        ["frequency_mhz"] = new McpToolProperty { Type = "number", Description = "Frequency in MHz (e.g. 146.52)" },
+                        ["vfo"] = new McpToolProperty { Type = "string", Description = "Which VFO to tune (default A)", Enum = new List<string> { "A", "B" } },
+                        ["modulation"] = new McpToolProperty { Type = "string", Description = "Modulation mode (default FM)", Enum = new List<string> { "FM", "AM", "DMR" } },
+                        ["bandwidth"] = new McpToolProperty { Type = "string", Description = "Bandwidth (default wide)", Enum = new List<string> { "narrow", "wide" } },
+                        ["power"] = new McpToolProperty { Type = "integer", Description = "Power level: 0=low, 1=medium, 2=high (default 2)", Minimum = 0, Maximum = 2 }
+                    },
+                    Required = new List<string> { "device_id", "frequency_mhz" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "set_ptt",
+                Description = "Key (transmit) or unkey the radio. While PTT is active, silence frames are sent to keep the radio keyed. Use with audio streaming or external audio sources.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["enabled"] = new McpToolProperty { Type = "boolean", Description = "True to key the radio (start transmitting), false to unkey" }
+                    },
+                    Required = new List<string> { "enabled" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "set_dual_watch",
+                Description = "Enable or disable dual watch mode (monitoring both VFO A and B).",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["device_id"] = new McpToolProperty { Type = "integer", Description = "Radio device ID (100+)" },
+                        ["enabled"] = new McpToolProperty { Type = "boolean", Description = "True to enable dual watch, false to disable" }
+                    },
+                    Required = new List<string> { "device_id", "enabled" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "set_scan",
+                Description = "Enable or disable scan mode on a connected radio.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["device_id"] = new McpToolProperty { Type = "integer", Description = "Radio device ID (100+)" },
+                        ["enabled"] = new McpToolProperty { Type = "boolean", Description = "True to enable scan, false to disable" }
+                    },
+                    Required = new List<string> { "device_id", "enabled" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "set_output_volume",
+                Description = "Set the software output volume (separate from hardware volume). Controls local audio playback level.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["device_id"] = new McpToolProperty { Type = "integer", Description = "Radio device ID (100+)" },
+                        ["level"] = new McpToolProperty { Type = "integer", Description = "Output volume level", Minimum = 0, Maximum = 100 }
+                    },
+                    Required = new List<string> { "device_id", "level" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "set_mute",
+                Description = "Mute or unmute audio output from a connected radio.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["device_id"] = new McpToolProperty { Type = "integer", Description = "Radio device ID (100+)" },
+                        ["enabled"] = new McpToolProperty { Type = "boolean", Description = "True to mute, false to unmute" }
+                    },
+                    Required = new List<string> { "device_id", "enabled" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "send_morse",
+                Description = "Transmit a text message as Morse code via the radio's voice handler.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["text"] = new McpToolProperty { Type = "string", Description = "Text to transmit as Morse code" }
+                    },
+                    Required = new List<string> { "text" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "send_dtmf",
+                Description = "Transmit DTMF tones over the radio. Valid digits: 0-9, *, #.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["device_id"] = new McpToolProperty { Type = "integer", Description = "Radio device ID (100+)" },
+                        ["digits"] = new McpToolProperty { Type = "string", Description = "DTMF digit string (0-9, *, #)" }
+                    },
+                    Required = new List<string> { "device_id", "digits" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "list_audio_clips",
+                Description = "List all saved audio clips (WAV files) available for playback.",
+                InputSchema = new McpToolInputSchema { Type = "object" }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "play_audio_clip",
+                Description = "Play a saved audio clip over the radio.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["device_id"] = new McpToolProperty { Type = "integer", Description = "Radio device ID (100+)" },
+                        ["clip_name"] = new McpToolProperty { Type = "string", Description = "Name of the audio clip to play" }
+                    },
+                    Required = new List<string> { "device_id", "clip_name" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "stop_audio_clip",
+                Description = "Stop any currently playing audio clip.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["device_id"] = new McpToolProperty { Type = "integer", Description = "Radio device ID (100+)" }
+                    },
+                    Required = new List<string> { "device_id" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "delete_audio_clip",
+                Description = "Delete a saved audio clip.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["clip_name"] = new McpToolProperty { Type = "string", Description = "Name of the audio clip to delete" }
+                    },
+                    Required = new List<string> { "clip_name" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "set_software_modem",
+                Description = "Set the software modem mode for packet radio operation.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["mode"] = new McpToolProperty { Type = "string", Description = "Modem mode", Enum = new List<string> { "None", "AFSK1200", "PSK2400", "PSK4800", "G3RUH9600" } }
+                    },
+                    Required = new List<string> { "mode" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "write_channel",
+                Description = "Write/edit a radio channel slot with specified settings. Frequency values are in MHz, CTCSS tones in Hz (0 = none).",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["device_id"] = new McpToolProperty { Type = "integer", Description = "Radio device ID (100+)" },
+                        ["channel_index"] = new McpToolProperty { Type = "integer", Description = "Channel slot index (0-based)", Minimum = 0 },
+                        ["rx_freq_mhz"] = new McpToolProperty { Type = "number", Description = "Receive frequency in MHz" },
+                        ["tx_freq_mhz"] = new McpToolProperty { Type = "number", Description = "Transmit frequency in MHz (defaults to rx_freq_mhz if omitted)" },
+                        ["name"] = new McpToolProperty { Type = "string", Description = "Channel name (max 10 characters)" },
+                        ["modulation"] = new McpToolProperty { Type = "string", Description = "Modulation mode (default FM)", Enum = new List<string> { "FM", "AM", "DMR" } },
+                        ["bandwidth"] = new McpToolProperty { Type = "string", Description = "Bandwidth (default wide)", Enum = new List<string> { "narrow", "wide" } },
+                        ["power"] = new McpToolProperty { Type = "integer", Description = "Power level: 0=low, 1=medium, 2=high (default 2)", Minimum = 0, Maximum = 2 },
+                        ["tx_tone_hz"] = new McpToolProperty { Type = "number", Description = "TX CTCSS tone in Hz (0 = none, e.g. 67.0, 100.0)" },
+                        ["rx_tone_hz"] = new McpToolProperty { Type = "number", Description = "RX CTCSS tone in Hz (0 = none)" }
+                    },
+                    Required = new List<string> { "device_id", "channel_index", "rx_freq_mhz" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "enable_recording",
+                Description = "Start recording radio audio to a WAV file.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["device_id"] = new McpToolProperty { Type = "integer", Description = "Radio device ID (100+)" }
+                    },
+                    Required = new List<string> { "device_id" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "disable_recording",
+                Description = "Stop recording radio audio.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["device_id"] = new McpToolProperty { Type = "integer", Description = "Radio device ID (100+)" }
+                    },
+                    Required = new List<string> { "device_id" }
+                }
+            });
+
+            // Settings tools (production — whitelist-validated, no debug flag needed)
+            var settingNames = new List<string>(SettingsWhitelist);
+            settingNames.Sort();
+            tools.Add(new McpToolDefinition
+            {
+                Name = "get_setting",
+                Description = "Read an application setting by name. Returns the current value.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["name"] = new McpToolProperty { Type = "string", Description = "Setting name", Enum = settingNames }
+                    },
+                    Required = new List<string> { "name" }
+                }
+            });
+
+            tools.Add(new McpToolDefinition
+            {
+                Name = "set_setting",
+                Description = "Write an application setting. Changes take effect immediately.",
+                InputSchema = new McpToolInputSchema
+                {
+                    Type = "object",
+                    Properties = new Dictionary<string, McpToolProperty>
+                    {
+                        ["name"] = new McpToolProperty { Type = "string", Description = "Setting name", Enum = settingNames },
+                        ["value"] = new McpToolProperty { Type = "string", Description = "Setting value (numeric values will be parsed as int)" }
+                    },
+                    Required = new List<string> { "name", "value" }
+                }
+            });
+
             // Debug tools
             bool debugEnabled = broker.GetValue<int>(0, "McpDebugToolsEnabled", 0) == 1;
             if (debugEnabled)
@@ -383,6 +690,24 @@ namespace HTCommander
                     case "connect_radio": return CallConnectRadio(arguments);
                     case "send_chat_message": return CallSendChatMessage(arguments);
                     case "get_ht_status": return CallGetHtStatus(arguments);
+                    case "set_vfo_frequency": return CallSetVfoFrequency(arguments);
+                    case "set_ptt": return CallSetPtt(arguments);
+                    case "set_dual_watch": return CallSetDualWatch(arguments);
+                    case "set_scan": return CallSetScan(arguments);
+                    case "set_output_volume": return CallSetOutputVolume(arguments);
+                    case "set_mute": return CallSetMute(arguments);
+                    case "send_morse": return CallSendMorse(arguments);
+                    case "send_dtmf": return CallSendDtmf(arguments);
+                    case "list_audio_clips": return CallListAudioClips();
+                    case "play_audio_clip": return CallPlayAudioClip(arguments);
+                    case "stop_audio_clip": return CallStopAudioClip(arguments);
+                    case "delete_audio_clip": return CallDeleteAudioClip(arguments);
+                    case "set_software_modem": return CallSetSoftwareModem(arguments);
+                    case "write_channel": return CallWriteChannel(arguments);
+                    case "enable_recording": return CallEnableRecording(arguments);
+                    case "disable_recording": return CallDisableRecording(arguments);
+                    case "get_setting": return CallGetSetting(arguments);
+                    case "set_setting": return CallSetSetting(arguments);
                     case "get_logs": return CallGetLogs(arguments);
                     case "get_databroker_state": return CallGetDataBrokerState(arguments);
                     case "get_app_setting": return CallGetAppSetting(arguments);
@@ -640,6 +965,267 @@ namespace HTCommander
             return MakeToolResult(JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
         }
 
+        // ---- Extended Radio Control Tools ----
+
+        private object CallSetVfoFrequency(JsonElement args)
+        {
+            int deviceId = GetIntArg(args, "device_id");
+            double freqMhz = GetDoubleArg(args, "frequency_mhz");
+            string vfo = GetOptionalStringArg(args, "vfo", "A");
+            string mod = GetOptionalStringArg(args, "modulation", "FM");
+            string bw = GetOptionalStringArg(args, "bandwidth", "wide");
+            int power = GetOptionalIntArg(args, "power", 2);
+
+            var info = broker.GetValue<RadioDevInfo>(deviceId, "Info", null);
+            if (info == null) return MakeToolError("No radio info available for device " + deviceId);
+
+            int scratchIndex = info.channel_count - 1;
+            var scratch = new RadioChannelInfo();
+            scratch.channel_id = scratchIndex;
+            scratch.rx_freq = (int)(freqMhz * 1000000);
+            scratch.tx_freq = (int)(freqMhz * 1000000);
+            scratch.rx_mod = ParseModulation(mod);
+            scratch.tx_mod = ParseModulation(mod);
+            scratch.bandwidth = bw == "narrow" ? Radio.RadioBandwidthType.NARROW : Radio.RadioBandwidthType.WIDE;
+            scratch.tx_at_max_power = (power == 2);
+            scratch.tx_at_med_power = (power == 1);
+            scratch.name_str = "QF";
+
+            broker.Dispatch(deviceId, "WriteChannel", scratch, store: false);
+            string eventName = (vfo == "B") ? "ChannelChangeVfoB" : "ChannelChangeVfoA";
+            broker.Dispatch(deviceId, eventName, scratchIndex, store: false);
+            return MakeToolResult($"VFO {vfo} set to {freqMhz} MHz ({mod}, {bw}, power {power}) on scratch channel {scratchIndex}");
+        }
+
+        private object CallSetPtt(JsonElement args)
+        {
+            bool enabled = GetBoolArg(args, "enabled");
+
+            if (enabled && !mcpPttActive)
+            {
+                mcpPttActive = true;
+                mcpPttSilenceTimer = new Timer(McpPttDispatchSilence, null, 0, 80);
+                broker.Dispatch(1, "ExternalPttState", true, store: false);
+                return MakeToolResult("PTT ON — radio is transmitting");
+            }
+            else if (!enabled && mcpPttActive)
+            {
+                mcpPttSilenceTimer?.Dispose();
+                mcpPttSilenceTimer = null;
+                mcpPttActive = false;
+                broker.Dispatch(1, "ExternalPttState", false, store: false);
+                return MakeToolResult("PTT OFF — radio stopped transmitting");
+            }
+
+            return MakeToolResult("PTT already " + (enabled ? "on" : "off"));
+        }
+
+        private void McpPttDispatchSilence(object state)
+        {
+            if (!mcpPttActive) return;
+            int radioId = activeRadioId;
+            if (radioId < 0) radioId = GetFirstConnectedRadioId();
+            if (radioId < 0) return;
+            byte[] silence = new byte[6400]; // 100ms of 32kHz 16-bit mono silence
+            broker.Dispatch(radioId, "TransmitVoicePCM", silence, store: false);
+        }
+
+        private object CallSetDualWatch(JsonElement args)
+        {
+            int deviceId = GetIntArg(args, "device_id");
+            bool enabled = GetBoolArg(args, "enabled");
+            broker.Dispatch(deviceId, "DualWatch", enabled, store: false);
+            return MakeToolResult("Dual watch " + (enabled ? "enabled" : "disabled"));
+        }
+
+        private object CallSetScan(JsonElement args)
+        {
+            int deviceId = GetIntArg(args, "device_id");
+            bool enabled = GetBoolArg(args, "enabled");
+            broker.Dispatch(deviceId, "Scan", enabled, store: false);
+            return MakeToolResult("Scan " + (enabled ? "enabled" : "disabled"));
+        }
+
+        private object CallSetOutputVolume(JsonElement args)
+        {
+            int deviceId = GetIntArg(args, "device_id");
+            int level = GetIntArg(args, "level");
+            if (level < 0 || level > 100) return MakeToolError("Output volume must be 0-100");
+            broker.Dispatch(deviceId, "SetOutputVolume", level, store: false);
+            return MakeToolResult("Output volume set to " + level);
+        }
+
+        private object CallSetMute(JsonElement args)
+        {
+            int deviceId = GetIntArg(args, "device_id");
+            bool enabled = GetBoolArg(args, "enabled");
+            broker.Dispatch(deviceId, "SetMute", enabled, store: false);
+            return MakeToolResult("Audio " + (enabled ? "muted" : "unmuted"));
+        }
+
+        private object CallSendMorse(JsonElement args)
+        {
+            string text = GetStringArg(args, "text");
+            if (string.IsNullOrEmpty(text)) return MakeToolError("Text cannot be empty");
+            broker.Dispatch(1, "Morse", text, store: false);
+            return MakeToolResult("Morse code sent: " + text);
+        }
+
+        private object CallSendDtmf(JsonElement args)
+        {
+            int deviceId = GetIntArg(args, "device_id");
+            string digits = GetStringArg(args, "digits");
+            if (string.IsNullOrEmpty(digits)) return MakeToolError("Digits cannot be empty");
+
+            byte[] pcm8 = DmtfEngine.GenerateDmtfPcm(digits);
+            byte[] pcm16 = new byte[pcm8.Length * 2];
+            for (int i = 0; i < pcm8.Length; i++)
+            {
+                short s = (short)((pcm8[i] - 128) << 8);
+                pcm16[i * 2] = (byte)(s & 0xFF);
+                pcm16[i * 2 + 1] = (byte)((s >> 8) & 0xFF);
+            }
+            broker.Dispatch(deviceId, "TransmitVoicePCM", new { Data = pcm16, PlayLocally = true }, store: false);
+            return MakeToolResult("DTMF tones sent: " + digits);
+        }
+
+        private object CallListAudioClips()
+        {
+            var clips = broker.GetValue<object>(0, "AudioClips", null);
+            if (clips == null) return MakeToolResult("No audio clips available");
+
+            if (clips is IEnumerable enumerable)
+            {
+                var clipList = new List<Dictionary<string, object>>();
+                foreach (var item in enumerable)
+                {
+                    if (item == null) continue;
+                    var entry = new Dictionary<string, object>();
+                    var nameProp = item.GetType().GetProperty("Name");
+                    var durProp = item.GetType().GetProperty("Duration");
+                    var sizeProp = item.GetType().GetProperty("Size");
+                    if (nameProp != null) entry["name"] = nameProp.GetValue(item);
+                    if (durProp != null) entry["duration_ms"] = durProp.GetValue(item);
+                    if (sizeProp != null) entry["size_bytes"] = sizeProp.GetValue(item);
+                    clipList.Add(entry);
+                }
+                return MakeToolResult(JsonSerializer.Serialize(clipList, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            return MakeToolResult("Audio clips data format not recognized");
+        }
+
+        private object CallPlayAudioClip(JsonElement args)
+        {
+            int deviceId = GetIntArg(args, "device_id");
+            string clipName = GetStringArg(args, "clip_name");
+            if (string.IsNullOrEmpty(clipName)) return MakeToolError("Clip name cannot be empty");
+            broker.Dispatch(deviceId, "PlayAudioClip", clipName, store: false);
+            return MakeToolResult("Playing audio clip: " + clipName);
+        }
+
+        private object CallStopAudioClip(JsonElement args)
+        {
+            int deviceId = GetIntArg(args, "device_id");
+            broker.Dispatch(deviceId, "StopAudioClip", null, store: false);
+            return MakeToolResult("Audio clip playback stopped");
+        }
+
+        private object CallDeleteAudioClip(JsonElement args)
+        {
+            string clipName = GetStringArg(args, "clip_name");
+            if (string.IsNullOrEmpty(clipName)) return MakeToolError("Clip name cannot be empty");
+            broker.Dispatch(DataBroker.AllDevices, "DeleteAudioClip", clipName, store: false);
+            return MakeToolResult("Audio clip deleted: " + clipName);
+        }
+
+        private object CallSetSoftwareModem(JsonElement args)
+        {
+            string mode = GetStringArg(args, "mode");
+            var validModes = new[] { "None", "AFSK1200", "PSK2400", "PSK4800", "G3RUH9600" };
+            bool valid = false;
+            foreach (var m in validModes) { if (m == mode) { valid = true; break; } }
+            if (!valid) return MakeToolError("Invalid modem mode. Valid: None, AFSK1200, PSK2400, PSK4800, G3RUH9600");
+            broker.Dispatch(0, "SetSoftwareModemMode", mode, store: false);
+            return MakeToolResult("Software modem set to " + mode);
+        }
+
+        private object CallWriteChannel(JsonElement args)
+        {
+            int deviceId = GetIntArg(args, "device_id");
+            int channelIndex = GetIntArg(args, "channel_index");
+            double rxFreqMhz = GetDoubleArg(args, "rx_freq_mhz");
+            double txFreqMhz = GetOptionalDoubleArg(args, "tx_freq_mhz", rxFreqMhz);
+            string name = GetOptionalStringArg(args, "name", "");
+            string mod = GetOptionalStringArg(args, "modulation", "FM");
+            string bw = GetOptionalStringArg(args, "bandwidth", "wide");
+            int power = GetOptionalIntArg(args, "power", 2);
+            double txToneHz = GetOptionalDoubleArg(args, "tx_tone_hz", 0);
+            double rxToneHz = GetOptionalDoubleArg(args, "rx_tone_hz", 0);
+
+            if (name.Length > 10) name = name.Substring(0, 10);
+
+            var channel = new RadioChannelInfo();
+            channel.channel_id = channelIndex;
+            channel.rx_freq = (int)(rxFreqMhz * 1000000);
+            channel.tx_freq = (int)(txFreqMhz * 1000000);
+            channel.rx_mod = ParseModulation(mod);
+            channel.tx_mod = ParseModulation(mod);
+            channel.bandwidth = bw == "narrow" ? Radio.RadioBandwidthType.NARROW : Radio.RadioBandwidthType.WIDE;
+            channel.tx_at_max_power = (power == 2);
+            channel.tx_at_med_power = (power == 1);
+            channel.tx_sub_audio = (int)(txToneHz * 100);
+            channel.rx_sub_audio = (int)(rxToneHz * 100);
+            channel.name_str = name;
+
+            broker.Dispatch(deviceId, "WriteChannel", channel, store: false);
+            return MakeToolResult($"Channel {channelIndex} written: {rxFreqMhz} MHz, {name}");
+        }
+
+        private object CallEnableRecording(JsonElement args)
+        {
+            int deviceId = GetIntArg(args, "device_id");
+            broker.Dispatch(deviceId, "RecordingEnable", deviceId, store: false);
+            return MakeToolResult("Recording started for device " + deviceId);
+        }
+
+        private object CallDisableRecording(JsonElement args)
+        {
+            int deviceId = GetIntArg(args, "device_id");
+            broker.Dispatch(deviceId, "RecordingDisable", null, store: false);
+            return MakeToolResult("Recording stopped for device " + deviceId);
+        }
+
+        // ---- Settings Tools ----
+
+        private bool IsWhitelistedSetting(string name)
+        {
+            foreach (var s in SettingsWhitelist) { if (s == name) return true; }
+            return false;
+        }
+
+        private object CallGetSetting(JsonElement args)
+        {
+            string name = GetStringArg(args, "name");
+            if (!IsWhitelistedSetting(name)) return MakeToolError("Setting '" + name + "' is not available. Use get_app_setting (debug mode) for unrestricted access.");
+            var value = DataBroker.GetValue(0, name, null);
+            if (value == null) return MakeToolResult(name + " = (not set)");
+            return MakeToolResult(name + " = " + value.ToString());
+        }
+
+        private object CallSetSetting(JsonElement args)
+        {
+            string name = GetStringArg(args, "name");
+            string value = GetStringArg(args, "value");
+            if (!IsWhitelistedSetting(name)) return MakeToolError("Setting '" + name + "' is not available. Use set_app_setting (debug mode) for unrestricted access.");
+
+            if (int.TryParse(value, out int intValue))
+                broker.Dispatch(0, name, intValue);
+            else
+                broker.Dispatch(0, name, value);
+
+            return MakeToolResult("Setting '" + name + "' set to: " + value);
+        }
+
         // ---- Debug Tools ----
 
         private object CallGetLogs(JsonElement args)
@@ -767,6 +1353,71 @@ namespace HTCommander
                 return elem.GetBoolean();
             }
             throw new ArgumentException("Missing required argument: " + name);
+        }
+
+        private double GetDoubleArg(JsonElement args, string name)
+        {
+            if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out JsonElement elem))
+            {
+                return elem.GetDouble();
+            }
+            throw new ArgumentException("Missing required argument: " + name);
+        }
+
+        private string GetOptionalStringArg(JsonElement args, string name, string defaultValue)
+        {
+            if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out JsonElement elem))
+            {
+                return elem.GetString() ?? defaultValue;
+            }
+            return defaultValue;
+        }
+
+        private int GetOptionalIntArg(JsonElement args, string name, int defaultValue)
+        {
+            if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out JsonElement elem))
+            {
+                return elem.GetInt32();
+            }
+            return defaultValue;
+        }
+
+        private double GetOptionalDoubleArg(JsonElement args, string name, double defaultValue)
+        {
+            if (args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out JsonElement elem))
+            {
+                return elem.GetDouble();
+            }
+            return defaultValue;
+        }
+
+        private Radio.RadioModulationType ParseModulation(string mod)
+        {
+            switch (mod)
+            {
+                case "AM": return Radio.RadioModulationType.AM;
+                case "DMR": return Radio.RadioModulationType.DMR;
+                default: return Radio.RadioModulationType.FM;
+            }
+        }
+
+        private int GetFirstConnectedRadioId()
+        {
+            var radios = broker.GetValue<object>(1, "ConnectedRadios", null);
+            if (radios is IEnumerable enumerable)
+            {
+                foreach (var item in enumerable)
+                {
+                    if (item == null) continue;
+                    var prop = item.GetType().GetProperty("DeviceId");
+                    if (prop != null)
+                    {
+                        object val = prop.GetValue(item);
+                        if (val is int id && id > 0) return id;
+                    }
+                }
+            }
+            return -1;
         }
 
         private object MakeToolResult(string text)

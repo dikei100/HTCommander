@@ -171,7 +171,7 @@ namespace HTCommander
                 if (long.TryParse(cmd.Substring(2), out freq) && freq > 0)
                 {
                     cachedFrequencyA = freq;
-                    Log($"CAT set VFO A freq: {freq} Hz");
+                    SetRadioFrequency(freq, "A");
                 }
                 response = $"FA{cachedFrequencyA.ToString("D11")};";
             }
@@ -186,7 +186,7 @@ namespace HTCommander
                 if (long.TryParse(cmd.Substring(2), out freq) && freq > 0)
                 {
                     cachedFrequencyB = freq;
-                    Log($"CAT set VFO B freq: {freq} Hz");
+                    SetRadioFrequency(freq, "B");
                 }
                 response = $"FB{cachedFrequencyB.ToString("D11")};";
             }
@@ -304,6 +304,31 @@ namespace HTCommander
             {
                 Log($"CAT write error: {ex.Message}");
             }
+        }
+
+        private void SetRadioFrequency(long freqHz, string vfo)
+        {
+            int radioId = activeRadioId;
+            if (radioId < 0) radioId = GetFirstConnectedRadioId();
+            if (radioId < 0) return;
+
+            var info = broker.GetValue<RadioDevInfo>(radioId, "Info", null);
+            if (info == null) return;
+
+            int scratchIndex = info.channel_count - 1;
+            var scratch = new RadioChannelInfo();
+            scratch.channel_id = scratchIndex;
+            scratch.rx_freq = (int)freqHz;
+            scratch.tx_freq = (int)freqHz;
+            scratch.rx_mod = Radio.RadioModulationType.FM;
+            scratch.tx_mod = Radio.RadioModulationType.FM;
+            scratch.bandwidth = Radio.RadioBandwidthType.WIDE;
+            scratch.name_str = "QF";
+
+            broker.Dispatch(radioId, "WriteChannel", scratch, store: false);
+            string eventName = (vfo == "B") ? "ChannelChangeVfoB" : "ChannelChangeVfoA";
+            broker.Dispatch(radioId, eventName, scratchIndex, store: false);
+            Log($"CAT set VFO {vfo} freq: {freqHz} Hz → scratch channel {scratchIndex}");
         }
 
         private void SetPtt(bool on)

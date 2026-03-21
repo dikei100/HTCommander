@@ -7,6 +7,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 using System;
 using System.IO;
 using System.Net;
+using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,10 +23,12 @@ namespace HTCommander
         private int port;
         private bool running = false;
         private string webRoot;
+        private WebAudioBridge audioBridge;
 
         public WebServer()
         {
             broker = new DataBrokerClient();
+            audioBridge = new WebAudioBridge();
 
             broker.Subscribe(0, "WebServerEnabled", OnSettingChanged);
             broker.Subscribe(0, "WebServerPort", OnSettingChanged);
@@ -93,6 +96,7 @@ namespace HTCommander
             if (!running) return;
             Log("Web server stopping...");
             running = false;
+            audioBridge?.DisconnectAll();
             cts?.Cancel();
 
             try { listener?.Stop(); } catch { }
@@ -130,6 +134,30 @@ namespace HTCommander
 
         private void HandleRequest(HttpListenerContext context)
         {
+            // WebSocket upgrade must be handled before the try/finally that closes the response stream
+            if (context.Request.IsWebSocketRequest)
+            {
+                if (context.Request.Url.AbsolutePath == "/ws/audio")
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var wsContext = await context.AcceptWebSocketAsync(null);
+                            await audioBridge.HandleWebSocketAsync(wsContext, cts?.Token ?? CancellationToken.None);
+                        }
+                        catch (Exception ex) { Log("WebSocket error: " + ex.Message); }
+                    });
+                    return; // Don't close response — WebSocket owns the connection
+                }
+                else
+                {
+                    try { SendResponse(context, 404, "404 - Not Found"); } catch { }
+                    try { context.Response.OutputStream.Close(); } catch { }
+                    return;
+                }
+            }
+
             try
             {
                 string urlPath = context.Request.Url.AbsolutePath;
@@ -235,6 +263,7 @@ namespace HTCommander
         public void Dispose()
         {
             Stop();
+            audioBridge?.Dispose();
             broker?.Dispose();
         }
     }

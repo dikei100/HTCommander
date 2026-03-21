@@ -275,6 +275,24 @@ body {
     min-height: 44px;
 }
 
+/* PTT button */
+.ptt-container { text-align: center; padding: 8px 0; }
+.ptt-btn {
+    width: 100px; height: 100px; border-radius: 50%;
+    background: var(--red); opacity: 0.6;
+    display: inline-flex; align-items: center; justify-content: center;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none; transition: opacity 0.1s, transform 0.1s;
+}
+.ptt-btn.active { opacity: 1; transform: scale(1.08); }
+.ptt-btn.disabled { background: #555; opacity: 0.3; }
+.ptt-label { color: #fff; font-size: 20px; font-weight: 700; pointer-events: none; }
+.ptt-status { color: var(--text-dim); font-size: 11px; margin-top: 6px; }
+
+/* HTTPS notice */
+.https-notice { font-size: 12px; color: var(--text-dim); }
+.https-notice code { background: rgba(255,255,255,0.1); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+
 /* Disconnected overlay */
 .disconnected-msg {
     text-align: center;

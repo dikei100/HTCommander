@@ -17,7 +17,16 @@ const state = {
     vfoBChannel: -1,
     channelsExpanded: true,
     chatExpanded: true,
-    chatMessages: []
+    chatMessages: [],
+    ws: null,
+    audioCtx: null,
+    micStream: null,
+    micProcessor: null,
+    micSource: null,
+    pttActive: false,
+    wsConnected: false,
+    nextPlayTime: 0,
+    micGain: parseInt(localStorage.getItem('micGain')) || 100
 };
 
 // ---- MCP Client ----
@@ -66,6 +75,8 @@ async function init() {
     state.pollTimer = setInterval(pollOnce, 2000);
 
     setupUI();
+    connectAudioWebSocket();
+    setupPtt();
 }
 
 // ---- Polling ----
@@ -136,6 +147,7 @@ function showDisconnected(msg) {
     document.getElementById('vfoContainer').style.display = 'none';
     document.getElementById('rssiBar').style.display = 'none';
     document.getElementById('controlsCard').style.display = 'none';
+    document.getElementById('pttCard').style.display = 'none';
     document.getElementById('channelCard').style.display = 'none';
     document.getElementById('chatCard').style.display = 'none';
 }
@@ -146,6 +158,7 @@ function hideDisconnected() {
     document.getElementById('vfoContainer').style.display = '';
     document.getElementById('rssiBar').style.display = '';
     document.getElementById('controlsCard').style.display = '';
+    document.getElementById('pttCard').style.display = '';
     document.getElementById('channelCard').style.display = '';
     document.getElementById('chatCard').style.display = '';
 }
@@ -332,6 +345,18 @@ function setupUI() {
         if (state.deviceId) mcpCall('set_squelch', { device_id: state.deviceId, level: parseInt(sqSlider.value) });
     });
 
+    // Mic gain slider (client-side only, persisted in localStorage)
+    const micSlider = document.getElementById('micGainSlider');
+    micSlider.value = state.micGain;
+    document.getElementById('micVal').textContent = state.micGain;
+    micSlider.addEventListener('input', () => {
+        state.micGain = parseInt(micSlider.value);
+        document.getElementById('micVal').textContent = micSlider.value;
+    });
+    micSlider.addEventListener('change', () => {
+        localStorage.setItem('micGain', micSlider.value);
+    });
+
     // Audio toggle
     const audioBtn = document.getElementById('audioBtn');
     audioBtn.addEventListener('click', async () => {
@@ -362,6 +387,169 @@ function setupToggle(toggleId, sectionId, stateKey) {
         section.style.display = state[stateKey] ? '' : 'none';
         arrow.classList.toggle('open', state[stateKey]);
     });
+}
+
+// ---- WebSocket Audio ----
+
+function connectAudioWebSocket() {
+    const wsUrl = 'ws://' + window.location.hostname + ':' + window.location.port + '/ws/audio';
+    let ws;
+    try { ws = new WebSocket(wsUrl); } catch (e) { return; }
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = () => {
+        state.wsConnected = true;
+        state.ws = ws;
+        updatePttUI();
+    };
+
+    ws.onmessage = (event) => {
+        if (!(event.data instanceof ArrayBuffer)) return;
+        const view = new Uint8Array(event.data);
+        if (view.length < 1) return;
+
+        switch (view[0]) {
+            case 0x01: // RX audio
+                playRxAudio(view.subarray(1));
+                break;
+            case 0x04: // PTT rejected
+                setPttStatus('Another client has PTT');
+                break;
+            case 0x05: // PTT acquired
+                setPttStatus('Transmitting...');
+                break;
+        }
+    };
+
+    ws.onclose = () => {
+        state.wsConnected = false;
+        state.ws = null;
+        updatePttUI();
+        setTimeout(connectAudioWebSocket, 3000);
+    };
+
+    ws.onerror = () => {}; // onclose will fire after this
+}
+
+function playRxAudio(pcmBytes) {
+    if (pcmBytes.length < 2) return;
+
+    if (!state.audioCtx) {
+        state.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+    }
+    const ctx = state.audioCtx;
+
+    const samples = pcmBytes.length / 2;
+    const buffer = ctx.createBuffer(1, samples, 48000);
+    const channel = buffer.getChannelData(0);
+    const dv = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, pcmBytes.byteLength);
+    for (let i = 0; i < samples; i++) {
+        channel[i] = dv.getInt16(i * 2, true) / 32768.0;
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+
+    // Schedule playback with minimal gap to avoid clicks
+    const now = ctx.currentTime;
+    const startTime = Math.max(now, state.nextPlayTime);
+    source.start(startTime);
+    state.nextPlayTime = startTime + buffer.duration;
+}
+
+function updatePttUI() {
+    const btn = document.getElementById('pttBtn');
+    if (state.wsConnected && state.connected) {
+        btn.classList.remove('disabled');
+        setPttStatus('Hold to transmit');
+    } else if (state.wsConnected) {
+        btn.classList.add('disabled');
+        setPttStatus('No radio connected');
+    } else {
+        btn.classList.add('disabled');
+        setPttStatus('Audio not connected');
+    }
+}
+
+function setPttStatus(msg) {
+    document.getElementById('pttStatus').textContent = msg;
+}
+
+function setupPtt() {
+    const btn = document.getElementById('pttBtn');
+
+    const startPtt = async (e) => {
+        e.preventDefault();
+        if (!state.wsConnected || !state.connected) return;
+        if (state.pttActive) return;
+
+        // Request mic if not already captured
+        if (!state.micStream) {
+            try {
+                state.micStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 48000, channelCount: 1, echoCancellation: false, noiseSuppression: false } });
+                setupMicCapture();
+                document.getElementById('httpsNotice').style.display = 'none';
+            } catch (err) {
+                // Mic access denied or HTTPS required — PTT still works for keying radio, just no voice TX
+                document.getElementById('httpsNotice').style.display = '';
+            }
+        }
+
+        state.pttActive = true;
+        btn.classList.add('active');
+        state.ws.send(new Uint8Array([0x02]));
+    };
+
+    const stopPtt = (e) => {
+        if (e) e.preventDefault();
+        if (!state.pttActive) return;
+        state.pttActive = false;
+        btn.classList.remove('active');
+        if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+            state.ws.send(new Uint8Array([0x03]));
+        }
+        setPttStatus('Hold to transmit');
+    };
+
+    btn.addEventListener('pointerdown', startPtt, { passive: false });
+    btn.addEventListener('pointerup', stopPtt, { passive: false });
+    btn.addEventListener('pointercancel', stopPtt, { passive: false });
+    btn.addEventListener('pointerleave', stopPtt, { passive: false });
+
+    // Prevent context menu on long press (mobile)
+    btn.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+
+function setupMicCapture() {
+    if (!state.audioCtx) {
+        state.audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+    }
+    const ctx = state.audioCtx;
+    const source = ctx.createMediaStreamSource(state.micStream);
+
+    // ScriptProcessorNode: 4096 samples, 1 input, 1 output
+    const processor = ctx.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = (e) => {
+        if (!state.pttActive || !state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+
+        const float32 = e.inputBuffer.getChannelData(0);
+
+        // Convert float32 → int16 LE
+        const frame = new Uint8Array(1 + float32.length * 2);
+        frame[0] = 0x01; // Audio command
+        const dv = new DataView(frame.buffer, 1);
+        const gain = state.micGain / 100;
+        for (let i = 0; i < float32.length; i++) {
+            dv.setInt16(i * 2, Math.max(-32768, Math.min(32767, float32[i] * gain * 32768)), true);
+        }
+        state.ws.send(frame);
+    };
+
+    source.connect(processor);
+    processor.connect(ctx.destination); // Required for ScriptProcessorNode to fire
+    state.micSource = source;
+    state.micProcessor = processor;
 }
 
 // ---- Start ----

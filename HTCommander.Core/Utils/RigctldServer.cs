@@ -253,7 +253,7 @@ namespace HTCommander
                     if (long.TryParse(args, out freq) && freq > 0)
                     {
                         cachedFrequency = freq;
-                        Log($"Rigctld set_freq: {freq} Hz (logged only, not sent to radio)");
+                        SetRadioFrequency(freq, "A");
                     }
                     return extended ? $"set_freq: {args}\nRPRT 0\n" : "RPRT 0\n";
                 }
@@ -317,6 +317,31 @@ namespace HTCommander
             sb.AppendLine("vfo_op=0x0");
             sb.AppendLine("done");
             return sb.ToString();
+        }
+
+        private void SetRadioFrequency(long freqHz, string vfo)
+        {
+            int radioId = activeRadioId;
+            if (radioId < 0) radioId = GetFirstConnectedRadioId();
+            if (radioId < 0) return;
+
+            var info = broker.GetValue<RadioDevInfo>(radioId, "Info", null);
+            if (info == null) return;
+
+            int scratchIndex = info.channel_count - 1;
+            var scratch = new RadioChannelInfo();
+            scratch.channel_id = scratchIndex;
+            scratch.rx_freq = (int)freqHz;
+            scratch.tx_freq = (int)freqHz;
+            scratch.rx_mod = Radio.RadioModulationType.FM;
+            scratch.tx_mod = Radio.RadioModulationType.FM;
+            scratch.bandwidth = Radio.RadioBandwidthType.WIDE;
+            scratch.name_str = "QF";
+
+            broker.Dispatch(radioId, "WriteChannel", scratch, store: false);
+            string eventName = (vfo == "B") ? "ChannelChangeVfoB" : "ChannelChangeVfoA";
+            broker.Dispatch(radioId, eventName, scratchIndex, store: false);
+            Log($"Rigctld set_freq: {freqHz} Hz → scratch channel {scratchIndex} on VFO {vfo}");
         }
 
         internal void SetPtt(bool on)
