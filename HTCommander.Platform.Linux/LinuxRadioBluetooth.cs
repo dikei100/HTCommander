@@ -596,6 +596,13 @@ namespace HTCommander.Platform.Linux
                 Debug($"Socket info: type={sockType} (1=STREAM), domain={sockDomain} (31=AF_BLUETOOTH), protocol={sockProto} (3=BTPROTO_RFCOMM)");
 
                 int flags = NativeMethods.fcntl(rfcommFd, 3 /* F_GETFL */);
+                if (flags < 0)
+                {
+                    Debug($"fcntl F_GETFL failed (errno={Marshal.GetLastWin32Error()})");
+                    lock (connectionLock) { isConnecting = false; }
+                    parent.Disconnect("Failed to get socket flags", RadioState.UnableToConnect);
+                    return;
+                }
                 Debug($"Socket flags=0x{flags:X}");
 
                 running = true;

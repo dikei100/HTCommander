@@ -203,13 +203,17 @@ namespace HTCommander
                 byte[] fileBytes = File.ReadAllBytes(fullPath);
                 string mimeType = GetMimeType(fullPath);
 
-                return new TlsHttpServer.HttpResponse
+                var fileResp = new TlsHttpServer.HttpResponse
                 {
                     StatusCode = 200,
                     StatusText = "OK",
                     ContentType = mimeType,
                     Body = fileBytes
                 };
+                fileResp.Headers["X-Content-Type-Options"] = "nosniff";
+                fileResp.Headers["X-Frame-Options"] = "DENY";
+                fileResp.Headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+                return fileResp;
             }
             else
             {

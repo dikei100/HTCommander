@@ -292,7 +292,8 @@ namespace HTCommander.Platform.Linux
             {
                 var channelMatch = Regex.Match(record, @"Channel:\s*(\d+)");
                 if (!channelMatch.Success) continue;
-                int channel = int.Parse(channelMatch.Groups[1].Value);
+                if (!int.TryParse(channelMatch.Groups[1].Value, out int channel)) continue;
+                if (channel < 1 || channel > 30) continue;
 
                 bool isAudio = record.Contains(GENERIC_AUDIO_UUID) ||
                                record.Contains("BS AOC") ||

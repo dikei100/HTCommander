@@ -784,7 +784,7 @@ namespace HTCommander
         private static unsafe byte[] EscapeBytes(byte cmd, byte[] b, int len)
         {
             if (len < 0 || len > 1024 * 1024) return null; // Guard against overflow
-            int maxLen = 2 + len * 2;
+            int maxLen = checked(2 + len * 2);
             byte[] result = new byte[maxLen];
             fixed (byte* bPtr = b)
             fixed (byte* rPtr = result)

@@ -39,6 +39,8 @@ async function mcpCall(tool, args) {
         if (state.mcpToken) hdrs['Authorization'] = 'Bearer ' + state.mcpToken;
         const r = await fetch(state.mcpUrl, {
             method: 'POST',
+            mode: 'cors',
+            credentials: 'omit',
             headers: hdrs,
             body: JSON.stringify({
                 jsonrpc: '2.0',
@@ -63,7 +65,11 @@ async function mcpCall(tool, args) {
 
 async function init() {
     try {
-        const configResp = await fetch('/api/config');
+        const configResp = await fetch('/api/config', { mode: 'same-origin', credentials: 'omit' });
+        if (!configResp.ok) {
+            showDisconnected('Cannot reach HTCommander web server.');
+            return;
+        }
         const config = await configResp.json();
         if (!config.mcpEnabled) {
             showDisconnected('MCP server is not enabled. Enable it in Settings → Servers.');
@@ -408,6 +414,10 @@ function connectAudioWebSocket() {
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
+        // Send auth token as first message if available (required when ServerBindAll is enabled)
+        if (state.mcpToken) {
+            ws.send('AUTH:' + state.mcpToken);
+        }
         state.wsConnected = true;
         state.ws = ws;
         updatePttUI();

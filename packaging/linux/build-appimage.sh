@@ -58,10 +58,12 @@ chmod +x "$APPDIR/AppRun"
 
 # Download appimagetool if not present
 APPIMAGETOOL="$SCRIPT_DIR/appimagetool-x86_64.AppImage"
+APPIMAGETOOL_URL="https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage"
+APPIMAGETOOL_SHA256="0019dfc4b32d63c1392aa264aed2253c1e0c2fb09216f8e2cc269bbfb8bb49b5"
 if [ ! -f "$APPIMAGETOOL" ]; then
     echo "Downloading appimagetool..."
-    wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" \
-        -O "$APPIMAGETOOL"
+    wget -q "$APPIMAGETOOL_URL" -O "$APPIMAGETOOL"
+    echo "$APPIMAGETOOL_SHA256  $APPIMAGETOOL" | sha256sum -c - || { echo "ERROR: appimagetool checksum verification failed!"; rm -f "$APPIMAGETOOL"; exit 1; }
     chmod +x "$APPIMAGETOOL"
 fi
 

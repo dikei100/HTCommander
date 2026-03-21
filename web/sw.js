@@ -84,6 +84,12 @@ self.addEventListener('fetch', event => {
         return;
     }
 
+    // Skip caching for API endpoints (may contain sensitive data like tokens)
+    if (event.request.url.includes('/api/')) {
+        event.respondWith(fetch(event.request));
+        return;
+    }
+
     // For other requests (like icons, or future CSS/JS if they become external)
     // Use a cache-first strategy.
     event.respondWith(

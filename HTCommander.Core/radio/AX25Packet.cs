@@ -48,7 +48,9 @@ namespace HTCommander
         public bool isSame(AX25Packet p)
         {
             if (p.dataStr != dataStr) return false;
-            for (int i = 0; i < 2; i++) { if (!p.addresses[i].isSame(addresses[i])) return false; } // Only compare 2 first addresses
+            if (p.addresses == null || addresses == null) return false;
+            int addrCount = Math.Min(2, Math.Min(p.addresses.Count, addresses.Count));
+            for (int i = 0; i < addrCount; i++) { if (!p.addresses[i].isSame(addresses[i])) return false; }
             if (p.pollFinal != pollFinal) return false;
             if (p.command != command) return false;
             if (p.nr != nr) return false;

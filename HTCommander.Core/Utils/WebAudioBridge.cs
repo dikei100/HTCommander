@@ -7,6 +7,8 @@ http://www.apache.org/licenses/LICENSE-2.0
 using System;
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -107,6 +109,44 @@ namespace HTCommander
         public async Task HandleWebSocketAsync(WebSocket ws, CancellationToken ct)
         {
             var clientId = Guid.NewGuid();
+
+            // Authenticate if ServerBindAll is enabled
+            int bindAll = DataBroker.GetValue<int>(0, "ServerBindAll", 0);
+            if (bindAll == 1)
+            {
+                string expectedToken = DataBroker.GetValue<string>(0, "McpApiToken", "") ?? "";
+                if (!string.IsNullOrEmpty(expectedToken))
+                {
+                    bool authenticated = false;
+                    try
+                    {
+                        // First message must be text: "AUTH:<token>"
+                        var authBuffer = new byte[1024];
+                        var authResult = await ws.ReceiveAsync(new ArraySegment<byte>(authBuffer), ct);
+                        if (authResult.MessageType == WebSocketMessageType.Text && authResult.Count > 5)
+                        {
+                            string authMsg = Encoding.UTF8.GetString(authBuffer, 0, authResult.Count);
+                            if (authMsg.StartsWith("AUTH:"))
+                            {
+                                string providedToken = authMsg.Substring(5);
+                                byte[] providedBytes = Encoding.UTF8.GetBytes(providedToken);
+                                byte[] expectedBytes = Encoding.UTF8.GetBytes(expectedToken);
+                                authenticated = CryptographicOperations.FixedTimeEquals(providedBytes, expectedBytes);
+                            }
+                        }
+                    }
+                    catch { }
+
+                    if (!authenticated)
+                    {
+                        Log("WebSocket client rejected: authentication failed");
+                        try { await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Authentication required", CancellationToken.None); } catch { }
+                        try { ws.Dispose(); } catch { }
+                        return;
+                    }
+                }
+            }
+
             clients.TryAdd(clientId, ws);
             Log("WebSocket audio client connected: " + clientId.ToString().Substring(0, 8));
 
