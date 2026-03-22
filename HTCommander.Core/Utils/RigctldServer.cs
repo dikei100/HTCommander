@@ -36,6 +36,7 @@ namespace HTCommander
         private bool bindAll = false;
         private volatile bool pttActive = false;
         private Timer pttSilenceTimer;
+        private readonly object pttLock = new object();
         private long cachedFrequency = 145500000; // Accessed from multiple threads; reads/writes are non-atomic on 32-bit but acceptable for cached display value
         private volatile int activeRadioId = -1;
 
@@ -363,22 +364,25 @@ namespace HTCommander
 
         internal void SetPtt(bool on)
         {
-            bool wasActive = pttActive;
-            pttActive = on;
+            lock (pttLock)
+            {
+                bool wasActive = pttActive;
+                pttActive = on;
 
-            if (on && !wasActive)
-            {
-                // Start dispatching silence to keep radio keyed
-                pttSilenceTimer = new Timer(DispatchSilence, null, 0, 80);
-                Log("Rigctld PTT ON");
-                broker?.Dispatch(1, "ExternalPttState", true, store: false);
-            }
-            else if (!on && wasActive)
-            {
-                pttSilenceTimer?.Dispose();
-                pttSilenceTimer = null;
-                Log("Rigctld PTT OFF");
-                broker?.Dispatch(1, "ExternalPttState", false, store: false);
+                if (on && !wasActive)
+                {
+                    // Start dispatching silence to keep radio keyed
+                    pttSilenceTimer = new Timer(DispatchSilence, null, 0, 80);
+                    Log("Rigctld PTT ON");
+                    broker?.Dispatch(1, "ExternalPttState", true, store: false);
+                }
+                else if (!on && wasActive)
+                {
+                    pttSilenceTimer?.Dispose();
+                    pttSilenceTimer = null;
+                    Log("Rigctld PTT OFF");
+                    broker?.Dispatch(1, "ExternalPttState", false, store: false);
+                }
             }
         }
 

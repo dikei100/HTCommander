@@ -29,6 +29,7 @@ namespace HTCommander.Platform.Linux
         private const int NativeBufferSize = 4096;
         private IntPtr _readPtr = IntPtr.Zero;
         private IntPtr _writePtr = IntPtr.Zero;
+        private readonly object nativeLock = new object();
 
         private DataBrokerClient logBroker;
 
@@ -149,18 +150,23 @@ namespace HTCommander.Platform.Linux
             {
                 while (!cancellationToken.IsCancellationRequested && _isConnected)
                 {
-                    int readSize = Math.Min(count, NativeBufferSize);
-                    int bytesRead = NativeMethods.read(rfcommFd, _readPtr, readSize);
-                    if (bytesRead > 0)
+                    int bytesRead;
+                    lock (nativeLock)
                     {
-                        // Clamp to requested count and buffer bounds to prevent overrun
-                        if (bytesRead > readSize) bytesRead = readSize;
-                        if (offset + bytesRead > buffer.Length) bytesRead = buffer.Length - offset;
-                        if (bytesRead <= 0) return 0;
-                        Marshal.Copy(_readPtr, buffer, offset, bytesRead);
-                        return bytesRead;
+                        if (_readPtr == IntPtr.Zero || rfcommFd < 0) return 0;
+                        int readSize = Math.Min(count, NativeBufferSize);
+                        bytesRead = NativeMethods.read(rfcommFd, _readPtr, readSize);
+                        if (bytesRead > 0)
+                        {
+                            // Clamp to requested count and buffer bounds to prevent overrun
+                            if (bytesRead > readSize) bytesRead = readSize;
+                            if (offset + bytesRead > buffer.Length) bytesRead = buffer.Length - offset;
+                            if (bytesRead <= 0) return 0;
+                            Marshal.Copy(_readPtr, buffer, offset, bytesRead);
+                            return bytesRead;
+                        }
                     }
-                    else if (bytesRead == 0)
+                    if (bytesRead == 0)
                     {
                         // Connection closed
                         _isConnected = false;
@@ -193,9 +199,14 @@ namespace HTCommander.Platform.Linux
                 int totalWritten = 0;
                 while (totalWritten < count && !cancellationToken.IsCancellationRequested && _isConnected)
                 {
-                    int chunkSize = Math.Min(count - totalWritten, NativeBufferSize);
-                    Marshal.Copy(buffer, offset + totalWritten, _writePtr, chunkSize);
-                    int written = NativeMethods.write(rfcommFd, _writePtr, chunkSize);
+                    int written;
+                    lock (nativeLock)
+                    {
+                        if (_writePtr == IntPtr.Zero || rfcommFd < 0) break;
+                        int chunkSize = Math.Min(count - totalWritten, NativeBufferSize);
+                        Marshal.Copy(buffer, offset + totalWritten, _writePtr, chunkSize);
+                        written = NativeMethods.write(rfcommFd, _writePtr, chunkSize);
+                    }
                     if (written > 0)
                     {
                         totalWritten += written;
@@ -224,13 +235,16 @@ namespace HTCommander.Platform.Linux
         public void Disconnect()
         {
             _isConnected = false;
-            if (rfcommFd >= 0)
+            lock (nativeLock)
             {
-                try { NativeMethods.close(rfcommFd); } catch (Exception) { }
-                rfcommFd = -1;
+                if (rfcommFd >= 0)
+                {
+                    try { NativeMethods.close(rfcommFd); } catch (Exception) { }
+                    rfcommFd = -1;
+                }
+                if (_readPtr != IntPtr.Zero) { Marshal.FreeHGlobal(_readPtr); _readPtr = IntPtr.Zero; }
+                if (_writePtr != IntPtr.Zero) { Marshal.FreeHGlobal(_writePtr); _writePtr = IntPtr.Zero; }
             }
-            if (_readPtr != IntPtr.Zero) { Marshal.FreeHGlobal(_readPtr); _readPtr = IntPtr.Zero; }
-            if (_writePtr != IntPtr.Zero) { Marshal.FreeHGlobal(_writePtr); _writePtr = IntPtr.Zero; }
         }
 
         public void OnPause() { }

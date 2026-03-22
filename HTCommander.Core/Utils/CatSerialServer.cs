@@ -27,6 +27,7 @@ namespace HTCommander
         private Timer pttSilenceTimer;
         private Timer pttTimeoutTimer;
         private const int PttTimeoutMs = 30000; // Auto-release PTT after 30s with no data
+        private readonly object pttLock = new object();
         private long cachedFrequencyA = 145500000; // Accessed from multiple threads; reads/writes are non-atomic on 32-bit but acceptable for cached display value
         private long cachedFrequencyB = 145500000;
         private volatile int activeRadioId = -1;
@@ -350,24 +351,27 @@ namespace HTCommander
 
         private void SetPtt(bool on)
         {
-            bool wasActive = pttActive;
-            pttActive = on;
+            lock (pttLock)
+            {
+                bool wasActive = pttActive;
+                pttActive = on;
 
-            if (on && !wasActive)
-            {
-                pttSilenceTimer = new Timer(DispatchSilence, null, 0, 80);
-                pttTimeoutTimer = new Timer(PttTimeoutCallback, null, PttTimeoutMs, Timeout.Infinite);
-                Log("CAT PTT ON");
-                broker?.Dispatch(1, "ExternalPttState", true, store: false);
-            }
-            else if (!on && wasActive)
-            {
-                pttSilenceTimer?.Dispose();
-                pttSilenceTimer = null;
-                pttTimeoutTimer?.Dispose();
-                pttTimeoutTimer = null;
-                Log("CAT PTT OFF");
-                broker?.Dispatch(1, "ExternalPttState", false, store: false);
+                if (on && !wasActive)
+                {
+                    pttSilenceTimer = new Timer(DispatchSilence, null, 0, 80);
+                    pttTimeoutTimer = new Timer(PttTimeoutCallback, null, PttTimeoutMs, Timeout.Infinite);
+                    Log("CAT PTT ON");
+                    broker?.Dispatch(1, "ExternalPttState", true, store: false);
+                }
+                else if (!on && wasActive)
+                {
+                    pttSilenceTimer?.Dispose();
+                    pttSilenceTimer = null;
+                    pttTimeoutTimer?.Dispose();
+                    pttTimeoutTimer = null;
+                    Log("CAT PTT OFF");
+                    broker?.Dispatch(1, "ExternalPttState", false, store: false);
+                }
             }
         }
 

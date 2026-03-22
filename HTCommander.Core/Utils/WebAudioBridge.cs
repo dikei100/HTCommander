@@ -24,6 +24,7 @@ namespace HTCommander
     {
         private DataBrokerClient broker;
         private readonly ConcurrentDictionary<Guid, WebSocket> clients = new ConcurrentDictionary<Guid, WebSocket>();
+        private readonly ConcurrentDictionary<Guid, SemaphoreSlim> clientSendLocks = new ConcurrentDictionary<Guid, SemaphoreSlim>();
         private readonly ConcurrentDictionary<Guid, long> clientLastAudioTime = new ConcurrentDictionary<Guid, long>();
         private const int MaxAudioFramesPerSecond = 200; // Rate limit per client
         private const int MaxClients = 20; // Maximum concurrent WebSocket audio clients
@@ -89,18 +90,28 @@ namespace HTCommander
                 frame[0] = 0x01;
                 Array.Copy(resampled, 0, frame, 1, resampled.Length);
 
-                // Broadcast to all connected clients
+                // Broadcast to all connected clients with per-client send serialization
                 var segment = new ArraySegment<byte>(frame);
                 foreach (var kvp in clients)
                 {
+                    var clientId = kvp.Key;
                     var ws = kvp.Value;
                     if (ws.State == WebSocketState.Open)
                     {
-                        try
+                        if (clientSendLocks.TryGetValue(clientId, out var sendLock))
                         {
-                            _ = ws.SendAsync(segment, WebSocketMessageType.Binary, true, CancellationToken.None);
+                            // Try to acquire lock without blocking; drop frame if client is slow
+                            if (sendLock.Wait(0))
+                            {
+                                try
+                                {
+                                    _ = ws.SendAsync(segment, WebSocketMessageType.Binary, true, CancellationToken.None)
+                                        .ContinueWith(_ => sendLock.Release(), TaskContinuationOptions.ExecuteSynchronously);
+                                }
+                                catch { sendLock.Release(); }
+                            }
+                            // else: drop frame for slow client
                         }
-                        catch { }
                     }
                 }
             }
@@ -154,9 +165,11 @@ namespace HTCommander
                 }
             }
 
+            clientSendLocks[clientId] = new SemaphoreSlim(1, 1);
             if (!clients.TryAdd(clientId, ws) || clients.Count > MaxClients)
             {
                 clients.TryRemove(clientId, out _);
+                if (clientSendLocks.TryRemove(clientId, out var sl)) sl.Dispose();
                 Log("WebSocket client rejected: max clients reached (" + MaxClients + ")");
                 try { await ws.CloseAsync(WebSocketCloseStatus.PolicyViolation, "Too many connections", CancellationToken.None); } catch { }
                 try { ws.Dispose(); } catch { }
@@ -213,6 +226,8 @@ namespace HTCommander
                 // Release PTT if this client held it
                 HandlePttStop(clientId);
                 clients.TryRemove(clientId, out _);
+                if (clientSendLocks.TryRemove(clientId, out var removedLock)) removedLock.Dispose();
+                clientLastAudioTime.TryRemove(clientId, out _);
                 Log("WebSocket audio client disconnected: " + clientId.ToString().Substring(0, 8));
 
                 if (ws.State != WebSocketState.Closed && ws.State != WebSocketState.Aborted)

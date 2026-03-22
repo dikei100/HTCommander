@@ -289,7 +289,7 @@ namespace HTCommander.Platform.Linux
                 // Split module arguments safely (key=value pairs separated by spaces)
                 foreach (string arg in arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries))
                     psi.ArgumentList.Add(arg);
-                var process = Process.Start(psi);
+                using var process = Process.Start(psi);
                 string output = process.StandardOutput.ReadToEnd().Trim();
                 process.WaitForExit(5000);
 
@@ -316,7 +316,7 @@ namespace HTCommander.Platform.Linux
                 };
                 psi.ArgumentList.Add("unload-module");
                 psi.ArgumentList.Add(moduleId.ToString());
-                var process = Process.Start(psi);
+                using var process = Process.Start(psi);
                 process.WaitForExit(3000);
             }
             catch { }

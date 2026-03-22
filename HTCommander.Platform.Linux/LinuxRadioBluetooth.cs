@@ -164,9 +164,14 @@ namespace HTCommander.Platform.Linux
 
         public void EnqueueWrite(int expectedResponse, byte[] cmdData)
         {
-            if (!running || rfcommFd < 0) return;
+            int fd;
+            lock (connectionLock)
+            {
+                if (!running || rfcommFd < 0) return;
+                fd = rfcommFd;
+            }
             byte[] bytes = GaiaEncode(cmdData);
-            int written = NativeMethods.write(rfcommFd, bytes, bytes.Length);
+            int written = NativeMethods.write(fd, bytes, bytes.Length);
             if (written < 0)
                 Debug($"write() failed: errno={Marshal.GetLastWin32Error()}");
         }

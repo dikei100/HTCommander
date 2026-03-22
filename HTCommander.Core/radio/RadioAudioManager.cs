@@ -47,7 +47,7 @@ namespace HTCommander
 
         // State
         private volatile bool _isAudioEnabled = false;
-        private bool _disposed = false;
+        private volatile bool _disposed = false;
         private DateTime audioRunStartTime;
         private volatile bool inAudioRun = false;
         private bool inAudioRunIsTransmit = false;
@@ -464,6 +464,8 @@ namespace HTCommander
 
         public bool TransmitVoice(byte[] pcmInputData, int pcmOffset, int pcmLength, bool play)
         {
+            if (pcmInputData == null || pcmOffset < 0 || pcmLength < 0 || pcmOffset + pcmLength > pcmInputData.Length) return false;
+
             // Check transport under lock and capture reference to avoid TOCTOU race
             lock (connectionLock) { if (!running || transport == null) return false; }
 

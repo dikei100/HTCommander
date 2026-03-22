@@ -294,9 +294,9 @@ namespace HTCommander.Platform.Linux
                 captureProcess = System.Diagnostics.Process.Start(psi);
                 if (captureProcess == null) return;
 
+                capturing = true;
                 captureThread = new System.Threading.Thread(CaptureLoop) { IsBackground = true };
                 captureThread.Start();
-                capturing = true;
             }
             catch (Exception)
             {

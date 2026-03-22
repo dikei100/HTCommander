@@ -48,26 +48,40 @@ namespace HTCommander
         {
             _syncContext = SynchronizationContext.Current;
             
-            // Ensure storage directory exists
+            // Ensure storage directory exists with restricted permissions on Linux
             if (!Directory.Exists(storagePath))
             {
                 Directory.CreateDirectory(storagePath);
+            }
+            if (!OperatingSystem.IsWindows())
+            {
+                try { File.SetUnixFileMode(storagePath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); } catch { }
             }
 
             _dbPath = Path.Combine(storagePath, "mails.db");
             _attachmentsPath = Path.Combine(storagePath, "attachments");
             _signalFilePath = Path.Combine(storagePath, "mails.signal");
 
-            // Ensure attachments directory exists
+            // Ensure attachments directory exists with restricted permissions on Linux
             if (!Directory.Exists(_attachmentsPath))
             {
                 Directory.CreateDirectory(_attachmentsPath);
+                if (!OperatingSystem.IsWindows())
+                {
+                    try { File.SetUnixFileMode(_attachmentsPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); } catch { }
+                }
             }
 
             // Initialize database connection with WAL mode for better concurrency
             string connectionString = $"Data Source={_dbPath};Version=3;Journal Mode=WAL;";
             _connection = new SQLiteConnection(connectionString);
             _connection.Open();
+
+            // Set restrictive permissions on database file on Linux
+            if (!OperatingSystem.IsWindows())
+            {
+                try { File.SetUnixFileMode(_dbPath, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch { }
+            }
 
             // Initialize database schema
             InitializeDatabase();
@@ -506,6 +520,10 @@ namespace HTCommander
             {
                 // Update the signal file to notify other instances
                 File.WriteAllText(_signalFilePath, DateTime.UtcNow.Ticks.ToString());
+                if (!OperatingSystem.IsWindows())
+                {
+                    try { File.SetUnixFileMode(_signalFilePath, UnixFileMode.UserRead | UnixFileMode.UserWrite); } catch { }
+                }
                 _lastSignalTime = DateTime.Now;
             }
             catch (Exception ex)

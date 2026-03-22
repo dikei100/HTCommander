@@ -1112,7 +1112,8 @@ namespace HTCommander
         {
             if (!messageFlags.ContainsKey(index) || messageFlags[index].Count == 0)
                 return "";
-            return string.Join(" ", messageFlags[index]);
+            // Sanitize flags to prevent IMAP response injection via CRLF
+            return SanitizeHeaderValue(string.Join(" ", messageFlags[index]));
         }
 
         private const int MaxSequenceSetResults = 10000;

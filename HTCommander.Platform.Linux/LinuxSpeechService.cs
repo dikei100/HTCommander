@@ -32,12 +32,13 @@ namespace HTCommander.Platform.Linux
 
             try
             {
-                var psi = new ProcessStartInfo("espeak-ng", "--voices")
+                var psi = new ProcessStartInfo("espeak-ng")
                 {
                     RedirectStandardOutput = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                psi.ArgumentList.Add("--voices");
 
                 using var process = Process.Start(psi);
                 var voices = new List<string>();
@@ -189,12 +190,13 @@ namespace HTCommander.Platform.Linux
         {
             try
             {
-                var psi = new ProcessStartInfo("espeak-ng", "--version")
+                var psi = new ProcessStartInfo("espeak-ng")
                 {
                     RedirectStandardOutput = true,
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
+                psi.ArgumentList.Add("--version");
                 using var process = Process.Start(psi);
                 process.WaitForExit(3000);
                 return process.ExitCode == 0;
