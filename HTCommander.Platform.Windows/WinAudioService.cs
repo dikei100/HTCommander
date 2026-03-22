@@ -31,7 +31,7 @@ namespace HTCommander.Platform.Windows
 
         public string[] GetOutputDevices()
         {
-            var enumerator = new MMDeviceEnumerator();
+            using var enumerator = new MMDeviceEnumerator();
             return enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
                 .Select(d => d.FriendlyName)
                 .ToArray();
@@ -39,7 +39,7 @@ namespace HTCommander.Platform.Windows
 
         public string[] GetInputDevices()
         {
-            var enumerator = new MMDeviceEnumerator();
+            using var enumerator = new MMDeviceEnumerator();
             return enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
                 .Select(d => d.FriendlyName)
                 .ToArray();
@@ -80,7 +80,7 @@ namespace HTCommander.Platform.Windows
             MMDevice device = null;
             if (!string.IsNullOrEmpty(_deviceId))
             {
-                var enumerator = new MMDeviceEnumerator();
+                using var enumerator = new MMDeviceEnumerator();
                 device = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)
                     .FirstOrDefault(d => d.FriendlyName == _deviceId);
             }
@@ -146,7 +146,7 @@ namespace HTCommander.Platform.Windows
             MMDevice device = null;
             if (!string.IsNullOrEmpty(_deviceId))
             {
-                var enumerator = new MMDeviceEnumerator();
+                using var enumerator = new MMDeviceEnumerator();
                 device = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active)
                     .FirstOrDefault(d => d.FriendlyName == _deviceId);
             }

@@ -427,8 +427,8 @@ namespace HTCommander
         {
             if (lockedTorrentRadios.Count == 0) return;
 
-            MemoryStream ms = new MemoryStream();
-            BinaryWriter writer = new BinaryWriter(ms);
+            using MemoryStream ms = new MemoryStream();
+            using BinaryWriter writer = new BinaryWriter(ms);
             writer.Write((byte)1); // Version
             writer.Write((byte)1);
 
@@ -616,13 +616,15 @@ namespace HTCommander
             if (p.pid == 162)
             {
                 // This is a control packet
-                MemoryStream ms = new MemoryStream(p.data);
-                BinaryReader reader = new BinaryReader(ms);
+                using MemoryStream ms = new MemoryStream(p.data);
+                using BinaryReader reader = new BinaryReader(ms);
 
                 string callsign = p.addresses[0].address;
                 int stationId = p.addresses[0].SSID;
                 byte[] shortId = null;
 
+                try
+                {
                 while (ms.Position < ms.Length)
                 {
                     byte recordType = reader.ReadByte();
@@ -650,6 +652,7 @@ namespace HTCommander
                         case 4: // Advertized Files
                             byte[] sId = reader.ReadBytes(12);
                             int sblockCount = reader.ReadUInt16();
+                            if (sblockCount > 10000) return; // Cap block count to prevent unbounded allocation
                             TorrentFile sFile = FindStationFile(callsign, stationId);
                             if ((sFile != null) && (sFile.Id.SequenceEqual(sId) == false))
                             {
@@ -709,6 +712,8 @@ namespace HTCommander
                             break;
                     }
                 }
+                }
+                catch (System.IO.EndOfStreamException) { /* Malformed torrent control packet */ }
             }
             else if (p.pid == 163)
             {

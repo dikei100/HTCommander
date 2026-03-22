@@ -171,9 +171,28 @@ namespace HTCommander.Platform.Linux
                 fd = rfcommFd;
             }
             byte[] bytes = GaiaEncode(cmdData);
-            int written = NativeMethods.write(fd, bytes, bytes.Length);
-            if (written < 0)
-                Debug($"write() failed: errno={Marshal.GetLastWin32Error()}");
+            int totalWritten = 0;
+            while (totalWritten < bytes.Length)
+            {
+                byte[] slice = (totalWritten == 0) ? bytes : bytes[totalWritten..];
+                int written = NativeMethods.write(fd, slice, slice.Length);
+                if (written > 0)
+                {
+                    totalWritten += written;
+                }
+                else if (written < 0)
+                {
+                    int errno = Marshal.GetLastWin32Error();
+                    if (errno == 11 || errno == 35) // EAGAIN / EWOULDBLOCK
+                    {
+                        Thread.Sleep(5);
+                        continue;
+                    }
+                    Debug($"write() failed: errno={errno}");
+                    return;
+                }
+                else return; // written == 0, unexpected
+            }
         }
 
         public void OnPause() { }

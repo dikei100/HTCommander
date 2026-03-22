@@ -376,6 +376,9 @@ namespace HTCommander
                 catch { }
             }
             clients.Clear();
+            foreach (var kvp in clientSendLocks) { try { kvp.Value.Dispose(); } catch { } }
+            clientSendLocks.Clear();
+            clientLastAudioTime.Clear();
 
             lock (pttLock)
             {

@@ -310,7 +310,7 @@ namespace HTCommander.Platform.Windows
                 }
 
                 running = true;
-                OnConnected?.Invoke();
+                ThreadPool.QueueUserWorkItem(_ => OnConnected?.Invoke());
 
                 while (running && !cancellationToken.IsCancellationRequested)
                 {

@@ -37,8 +37,9 @@ namespace HTCommander
         };
 
         private readonly DataBrokerClient broker;
-        private bool mcpPttActive = false;
+        private volatile bool mcpPttActive = false;
         private Timer mcpPttSilenceTimer;
+        private readonly object mcpPttLock = new object();
         private int activeRadioId = -1;
 
         public McpTools(DataBrokerClient broker)
@@ -1011,20 +1012,23 @@ namespace HTCommander
         {
             bool enabled = GetBoolArg(args, "enabled");
 
-            if (enabled && !mcpPttActive)
+            lock (mcpPttLock)
             {
-                mcpPttActive = true;
-                mcpPttSilenceTimer = new Timer(McpPttDispatchSilence, null, 0, 80);
-                broker.Dispatch(1, "ExternalPttState", true, store: false);
-                return MakeToolResult("PTT ON — radio is transmitting");
-            }
-            else if (!enabled && mcpPttActive)
-            {
-                mcpPttSilenceTimer?.Dispose();
-                mcpPttSilenceTimer = null;
-                mcpPttActive = false;
-                broker.Dispatch(1, "ExternalPttState", false, store: false);
-                return MakeToolResult("PTT OFF — radio stopped transmitting");
+                if (enabled && !mcpPttActive)
+                {
+                    mcpPttActive = true;
+                    mcpPttSilenceTimer = new Timer(McpPttDispatchSilence, null, 0, 80);
+                    broker.Dispatch(1, "ExternalPttState", true, store: false);
+                    return MakeToolResult("PTT ON — radio is transmitting");
+                }
+                else if (!enabled && mcpPttActive)
+                {
+                    mcpPttSilenceTimer?.Dispose();
+                    mcpPttSilenceTimer = null;
+                    mcpPttActive = false;
+                    broker.Dispatch(1, "ExternalPttState", false, store: false);
+                    return MakeToolResult("PTT OFF — radio stopped transmitting");
+                }
             }
 
             return MakeToolResult("PTT already " + (enabled ? "on" : "off"));

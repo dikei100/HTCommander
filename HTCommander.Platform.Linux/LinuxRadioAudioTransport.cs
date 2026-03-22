@@ -151,6 +151,7 @@ namespace HTCommander.Platform.Linux
                 while (!cancellationToken.IsCancellationRequested && _isConnected)
                 {
                     int bytesRead;
+                    int readErrno = 0;
                     lock (nativeLock)
                     {
                         if (_readPtr == IntPtr.Zero || rfcommFd < 0) return 0;
@@ -165,6 +166,7 @@ namespace HTCommander.Platform.Linux
                             Marshal.Copy(_readPtr, buffer, offset, bytesRead);
                             return bytesRead;
                         }
+                        if (bytesRead < 0) readErrno = Marshal.GetLastWin32Error();
                     }
                     if (bytesRead == 0)
                     {
@@ -174,8 +176,7 @@ namespace HTCommander.Platform.Linux
                     }
                     else
                     {
-                        int errno = Marshal.GetLastWin32Error();
-                        if (errno == 11 || errno == 35) // EAGAIN / EWOULDBLOCK
+                        if (readErrno == 11 || readErrno == 35) // EAGAIN / EWOULDBLOCK
                         {
                             Thread.Sleep(10);
                             continue;
@@ -200,12 +201,14 @@ namespace HTCommander.Platform.Linux
                 while (totalWritten < count && !cancellationToken.IsCancellationRequested && _isConnected)
                 {
                     int written;
+                    int writeErrno = 0;
                     lock (nativeLock)
                     {
                         if (_writePtr == IntPtr.Zero || rfcommFd < 0) break;
                         int chunkSize = Math.Min(count - totalWritten, NativeBufferSize);
                         Marshal.Copy(buffer, offset + totalWritten, _writePtr, chunkSize);
                         written = NativeMethods.write(rfcommFd, _writePtr, chunkSize);
+                        if (written < 0) writeErrno = Marshal.GetLastWin32Error();
                     }
                     if (written > 0)
                     {
@@ -213,8 +216,7 @@ namespace HTCommander.Platform.Linux
                     }
                     else if (written < 0)
                     {
-                        int errno = Marshal.GetLastWin32Error();
-                        if (errno == 11 || errno == 35) // EAGAIN
+                        if (writeErrno == 11 || writeErrno == 35) // EAGAIN
                         {
                             Thread.Sleep(5);
                             continue;
