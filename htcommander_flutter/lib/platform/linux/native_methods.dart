@@ -45,6 +45,33 @@ const int pollhup = 8;
 /// poll() event: invalid request.
 const int pollnval = 16;
 
+/// poll() event: writable (for connect completion).
+const int pollout = 4;
+
+/// SOL_SOCKET level for getsockopt.
+const int solSocket = 1;
+
+/// SO_ERROR option for getsockopt.
+const int soError = 4;
+
+/// EINPROGRESS errno.
+const int einprogress = 115;
+
+/// SIG_BLOCK for sigprocmask.
+const int sigBlock = 0;
+
+/// SIG_UNBLOCK for sigprocmask.
+const int sigUnblock = 1;
+
+/// SIGPROF signal number (Dart VM uses this for profiling).
+const int sigprof = 27;
+
+/// SIGALRM signal number.
+const int sigalrm = 14;
+
+/// Size of sigset_t on Linux x86_64 (128 bytes = 1024 bits).
+const int sigsetSize = 128;
+
 // --- Structs ---
 
 /// struct pollfd for poll() syscall.
@@ -93,6 +120,24 @@ typedef _PollDart = int Function(Pointer<PollFd> fds, int nfds, int timeout);
 typedef _ErrnoLocationNative = Pointer<Int32> Function();
 typedef _ErrnoLocationDart = Pointer<Int32> Function();
 
+typedef _SigprocmaskNative = Int32 Function(
+    Int32 how, Pointer<Uint8> set, Pointer<Uint8> oldset);
+typedef _SigprocmaskDart = int Function(
+    int how, Pointer<Uint8> set, Pointer<Uint8> oldset);
+
+typedef _SigemptysetNative = Int32 Function(Pointer<Uint8> set);
+typedef _SigemptysetDart = int Function(Pointer<Uint8> set);
+
+typedef _SigaddsetNative = Int32 Function(Pointer<Uint8> set, Int32 signum);
+typedef _SigaddsetDart = int Function(Pointer<Uint8> set, int signum);
+
+typedef _GetsockoptNative = Int32 Function(
+    Int32 sockfd, Int32 level, Int32 optname, Pointer<Int32> optval,
+    Pointer<Int32> optlen);
+typedef _GetsockoptDart = int Function(
+    int sockfd, int level, int optname, Pointer<Int32> optval,
+    Pointer<Int32> optlen);
+
 /// Native libc bindings for RFCOMM Bluetooth sockets.
 class NativeMethods {
   NativeMethods._();
@@ -125,6 +170,21 @@ class NativeMethods {
 
   static final int Function(Pointer<PollFd> fds, int nfds, int timeout) poll =
       _libc.lookupFunction<_PollNative, _PollDart>('poll');
+
+  static final int Function(int, int, int, Pointer<Int32>, Pointer<Int32>)
+      getsockopt =
+      _libc.lookupFunction<_GetsockoptNative, _GetsockoptDart>('getsockopt');
+
+  static final int Function(int, Pointer<Uint8>, Pointer<Uint8>) sigprocmask =
+      _libc.lookupFunction<_SigprocmaskNative, _SigprocmaskDart>(
+          'sigprocmask');
+
+  static final int Function(Pointer<Uint8>) sigemptyset =
+      _libc.lookupFunction<_SigemptysetNative, _SigemptysetDart>(
+          'sigemptyset');
+
+  static final int Function(Pointer<Uint8>, int) sigaddset =
+      _libc.lookupFunction<_SigaddsetNative, _SigaddsetDart>('sigaddset');
 
   static final _ErrnoLocationDart _errnoLocation =
       _libc.lookupFunction<_ErrnoLocationNative, _ErrnoLocationDart>(

@@ -86,6 +86,13 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
       case 'error':
         final msg = message['msg'] as String? ?? 'Unknown error';
         onDataReceived?.call(Exception(msg), null);
+      case 'log':
+        // Forward isolate debug messages to DataBroker log
+        final msg = message['msg'] as String? ?? '';
+        // Import not available here — use the onDataReceived with a special marker
+        // Instead, just print to console for debugging
+        // ignore: avoid_print
+        print('[BT-Isolate] $msg');
       case 'disconnected':
         _connected = false;
         _cleanup();
@@ -138,27 +145,40 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
     // Connection with retries
     for (int attempt = 1; attempt <= 3 && running; attempt++) {
       try {
+        _debug(toMain, 'Connecting to $macColon (attempt $attempt/3)...');
+
         // Step 1: ACL connect via bluetoothctl
-        await _aclConnect(macColon);
+        _debug(toMain, 'Step 1: ACL connect via bluetoothctl...');
+        await _aclConnect(macColon, toMain);
 
         // Step 2: SDP discovery
-        final sppChannels = await _discoverSppChannels(macColon);
+        _debug(toMain, 'Step 2: SDP channel discovery...');
+        final sppChannels = await _discoverSppChannels(macColon, toMain);
 
         if (sppChannels != null && sppChannels.isNotEmpty) {
-          rfcommFd = _connectToGaiaChannel(bdaddr, sppChannels);
+          _debug(toMain, 'SDP found ${sppChannels.length} channel(s): $sppChannels');
+          rfcommFd = _connectToGaiaChannel(bdaddr, sppChannels, toMain);
+        } else {
+          _debug(toMain, 'SDP discovery returned no channels');
         }
 
         // Step 3: Probe channels 1-10 if SDP failed
         if (rfcommFd < 0) {
-          rfcommFd = _probeChannels(bdaddr);
+          _debug(toMain, 'Step 3: Probing RFCOMM channels 1-10...');
+          rfcommFd = _probeChannels(bdaddr, toMain);
         }
 
-        if (rfcommFd >= 0) break;
+        if (rfcommFd >= 0) {
+          _debug(toMain, 'Connected on fd=$rfcommFd');
+          break;
+        }
 
+        _debug(toMain, 'Attempt $attempt failed — no GAIA-responsive channel');
         if (attempt < 3 && running) {
           await Future<void>.delayed(const Duration(seconds: 2));
         }
-      } catch (e) {
+      } catch (e, st) {
+        _debug(toMain, 'Attempt $attempt error: $e\n$st');
         if (rfcommFd >= 0) {
           NativeMethods.close(rfcommFd);
           rfcommFd = -1;
@@ -283,25 +303,35 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
 
   // --- Connection helpers (run in isolate) ---
 
-  static Future<void> _aclConnect(String macColon) async {
+  static void _debug(SendPort toMain, String msg) {
+    toMain.send(<String, dynamic>{'event': 'log', 'msg': msg});
+  }
+
+  static Future<void> _aclConnect(String macColon, SendPort toMain) async {
     try {
-      await Process.run('bluetoothctl', ['connect', macColon]);
+      final result = await Process.run('bluetoothctl', ['connect', macColon]);
+      _debug(toMain, 'bluetoothctl connect: exit=${result.exitCode}, stdout=${(result.stdout as String).trim()}');
       await Future<void>.delayed(const Duration(seconds: 2));
-    } catch (_) {
-      // ACL connect failure is non-fatal — direct RFCOMM may still work
+    } catch (e) {
+      _debug(toMain, 'bluetoothctl failed: $e (non-fatal)');
     }
   }
 
-  static Future<List<int>?> _discoverSppChannels(String macColon) async {
+  static Future<List<int>?> _discoverSppChannels(String macColon, SendPort toMain) async {
     try {
       final result = await Process.run('sdptool', ['browse', macColon]);
-      if (result.exitCode != 0) return null;
+      _debug(toMain, 'sdptool browse: exit=${result.exitCode}, output=${(result.stdout as String).length} bytes');
+      if (result.exitCode != 0) {
+        _debug(toMain, 'sdptool stderr: ${(result.stderr as String).trim()}');
+        return null;
+      }
 
       final output = result.stdout as String;
       if (output.isEmpty) return null;
 
       return _parseSdptoolOutput(output);
-    } catch (_) {
+    } catch (e) {
+      _debug(toMain, 'sdptool failed: $e');
       return null;
     }
   }
@@ -333,15 +363,20 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
     return sppChannels.isNotEmpty ? sppChannels : allChannels;
   }
 
-  static int _connectToGaiaChannel(List<int> bdaddr, List<int> channels) {
+  static int _connectToGaiaChannel(List<int> bdaddr, List<int> channels, SendPort toMain) {
     for (final ch in channels) {
-      final fd = _createRfcommFd(bdaddr, ch);
+      _debug(toMain, 'Trying SDP channel $ch...');
+      final fd = _createRfcommFd(bdaddr, ch, toMain);
       if (fd < 0) continue;
 
       try {
-        if (_verifyGaiaResponse(fd, ch)) return fd;
-      } catch (_) {
-        // Verification exception — close and try next
+        if (_verifyGaiaResponse(fd, ch, toMain)) {
+          _debug(toMain, 'Channel $ch: GAIA verified!');
+          return fd;
+        }
+        _debug(toMain, 'Channel $ch: no GAIA response');
+      } catch (e) {
+        _debug(toMain, 'Channel $ch: verification error: $e');
       }
 
       NativeMethods.close(fd);
@@ -349,15 +384,20 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
     return -1;
   }
 
-  static int _probeChannels(List<int> bdaddr) {
+  static int _probeChannels(List<int> bdaddr, SendPort toMain) {
     for (int ch = 1; ch <= 10; ch++) {
-      final fd = _createRfcommFd(bdaddr, ch);
+      _debug(toMain, 'Probing channel $ch...');
+      final fd = _createRfcommFd(bdaddr, ch, toMain);
       if (fd < 0) continue;
 
       try {
-        if (_verifyGaiaResponse(fd, ch)) return fd;
-      } catch (_) {
-        // Verification exception
+        if (_verifyGaiaResponse(fd, ch, toMain)) {
+          _debug(toMain, 'Channel $ch: GAIA verified!');
+          return fd;
+        }
+        _debug(toMain, 'Channel $ch: no GAIA response');
+      } catch (e) {
+        _debug(toMain, 'Channel $ch: verification error: $e');
       }
 
       NativeMethods.close(fd);
@@ -366,7 +406,7 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
   }
 
   /// Sends GAIA GET_DEV_ID and checks for a valid FF 01 response via poll().
-  static bool _verifyGaiaResponse(int fd, int channel) {
+  static bool _verifyGaiaResponse(int fd, int channel, SendPort toMain) {
     // Build GET_DEV_ID: group=BASIC(2), cmd=1
     final gaiaCmd =
         GaiaProtocol.encode(Uint8List.fromList([0x00, 0x02, 0x00, 0x01]));
@@ -417,25 +457,47 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
     }
   }
 
-  static int _createRfcommFd(List<int> bdaddr, int channel) {
+  static int _createRfcommFd(List<int> bdaddr, int channel, SendPort toMain) {
     if (bdaddr.length < 6) return -1;
 
-    final fd =
-        NativeMethods.socket(afBluetooth, sockStream, btprotoRfcomm);
-    if (fd < 0) return -1;
-
-    final addr = buildSockaddrRc(bdaddr, channel);
-    try {
-      final result = NativeMethods.connect(fd, addr.cast<Void>(), 10);
-      if (result < 0) {
-        NativeMethods.close(fd);
-        return -1;
-      }
-    } finally {
-      calloc.free(addr);
+    final fd = NativeMethods.socket(afBluetooth, sockStream, btprotoRfcomm);
+    if (fd < 0) {
+      _debug(toMain, 'socket() failed: errno=${NativeMethods.errno}');
+      return -1;
     }
 
-    return fd;
+    final addr = buildSockaddrRc(bdaddr, channel);
+
+    // Block SIGPROF around connect() — Dart VM's profiler sends SIGPROF
+    // which interrupts blocking syscalls with EINTR on RFCOMM sockets.
+    final blockSet = calloc<Uint8>(sigsetSize);
+    final oldSet = calloc<Uint8>(sigsetSize);
+
+    try {
+      NativeMethods.sigemptyset(blockSet);
+      NativeMethods.sigaddset(blockSet, sigprof);
+      NativeMethods.sigaddset(blockSet, sigalrm);
+      NativeMethods.sigprocmask(sigBlock, blockSet, oldSet);
+
+      final result = NativeMethods.connect(fd, addr.cast<Void>(), 10);
+
+      // Restore signal mask immediately
+      NativeMethods.sigprocmask(sigUnblock, blockSet, nullptr.cast<Uint8>());
+
+      if (result == 0) {
+        _debug(toMain, 'RFCOMM connected: fd=$fd, ch=$channel');
+        return fd;
+      }
+
+      final err = NativeMethods.errno;
+      _debug(toMain, 'connect(ch=$channel) failed: errno=$err');
+      NativeMethods.close(fd);
+      return -1;
+    } finally {
+      calloc.free(addr);
+      calloc.free(blockSet);
+      calloc.free(oldSet);
+    }
   }
 
   static void _writeAll(int fd, Uint8List data) {
