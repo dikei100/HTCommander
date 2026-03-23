@@ -4,7 +4,9 @@
         Title="Confirm"
         Width="360" Height="160"
         WindowStartupLocation="CenterOwner"
-        CanResize="False">
+        CanResize="False"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <DockPanel Margin="16">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">

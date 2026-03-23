@@ -4,37 +4,179 @@
              RequestedThemeVariant="Default">
     <Application.Styles>
         <FluentTheme />
+        <!-- Override Fluent theme defaults to match Signal Protocol -->
+        <Style Selector="Window">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBase}" />
+            <Setter Property="Foreground" Value="{DynamicResource OnSurface}" />
+        </Style>
+        <Style Selector="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource OnSurface}" />
+        </Style>
+        <Style Selector="Button">
+            <Setter Property="Background" Value="{DynamicResource SurfaceContainerHigh}" />
+            <Setter Property="Foreground" Value="{DynamicResource OnSurface}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceContainerHighest}" />
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="{DynamicResource SurfaceContainerLow}" />
+            <Setter Property="Foreground" Value="{DynamicResource OnSurface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource OutlineVariant}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryAccent}" />
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="Background" Value="{DynamicResource SurfaceContainerHigh}" />
+            <Setter Property="Foreground" Value="{DynamicResource OnSurface}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <Style Selector="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource OnSurface}" />
+        </Style>
+        <Style Selector="Slider /template/ Thumb">
+            <Setter Property="Background" Value="{DynamicResource PrimaryAccent}" />
+        </Style>
+        <Style Selector="ProgressBar">
+            <Setter Property="Background" Value="{DynamicResource SurfaceContainerHigh}" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryAccent}" />
+        </Style>
+        <Style Selector="DataGrid">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="RowBackground" Value="Transparent" />
+        </Style>
+        <Style Selector="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource SurfaceContainerHigh}" />
+            <Setter Property="Foreground" Value="{DynamicResource OnSurfaceVariant}" />
+            <Setter Property="FontSize" Value="11" />
+        </Style>
+        <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle">
+            <Setter Property="Fill" Value="{DynamicResource SurfaceContainerHighest}" />
+        </Style>
+        <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
+            <Setter Property="Fill" Value="{DynamicResource PrimaryContainer}" />
+        </Style>
+        <Style Selector="DataGridCell">
+            <Setter Property="Foreground" Value="{DynamicResource OnSurface}" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style Selector="TabControl">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="TreeViewItem">
+            <Setter Property="Foreground" Value="{DynamicResource OnSurface}" />
+        </Style>
+        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceContainerHigh}" />
+        </Style>
+        <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PrimaryContainer}" />
+        </Style>
+        <Style Selector="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource OnSurface}" />
+        </Style>
+        <Style Selector="ScrollViewer">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ToggleButton">
+            <Setter Property="Background" Value="{DynamicResource SurfaceContainerHigh}" />
+            <Setter Property="Foreground" Value="{DynamicResource OnSurface}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <Style Selector="ToggleButton:checked /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PrimaryContainer}" />
+        </Style>
     </Application.Styles>
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="CardBackground" Color="#2D2D30" />
-                    <SolidColorBrush x:Key="PanelBackground" Color="#1E1E1E" />
-                    <SolidColorBrush x:Key="PanelBorder" Color="#3F3F46" />
-                    <SolidColorBrush x:Key="TabHeaderBackground" Color="#2D2D30" />
-                    <SolidColorBrush x:Key="TextAreaBackground" Color="#1E1E1E" />
-                    <SolidColorBrush x:Key="TextAreaForeground" Color="#D4D4D4" />
-                    <SolidColorBrush x:Key="SplitterColor" Color="#444444" />
-                    <SolidColorBrush x:Key="InfoCardBackground" Color="#252526" />
-                    <SolidColorBrush x:Key="SstvPreviewBackground" Color="#1E1E1E" />
-                    <SolidColorBrush x:Key="PrimaryText" Color="#E0E0E0" />
-                    <SolidColorBrush x:Key="SecondaryText" Color="#888888" />
-                    <SolidColorBrush x:Key="TertiaryText" Color="#666666" />
+                    <!-- Legacy keys (updated to Signal Protocol palette) -->
+                    <SolidColorBrush x:Key="CardBackground" Color="#151929" />
+                    <SolidColorBrush x:Key="PanelBackground" Color="#0c0e17" />
+                    <SolidColorBrush x:Key="PanelBorder" Color="#404762" />
+                    <SolidColorBrush x:Key="TabHeaderBackground" Color="#151929" />
+                    <SolidColorBrush x:Key="TextAreaBackground" Color="#10131f" />
+                    <SolidColorBrush x:Key="TextAreaForeground" Color="#e0e4ff" />
+                    <SolidColorBrush x:Key="SplitterColor" Color="#404762" />
+                    <SolidColorBrush x:Key="InfoCardBackground" Color="#191f33" />
+                    <SolidColorBrush x:Key="SstvPreviewBackground" Color="#10131f" />
+                    <SolidColorBrush x:Key="PrimaryText" Color="#e0e4ff" />
+                    <SolidColorBrush x:Key="SecondaryText" Color="#a4aac9" />
+                    <SolidColorBrush x:Key="TertiaryText" Color="#6e7492" />
+                    <!-- Signal Protocol surface hierarchy (increased contrast) -->
+                    <SolidColorBrush x:Key="SurfaceBase" Color="#080a12" />
+                    <SolidColorBrush x:Key="SurfaceContainerLow" Color="#0e1019" />
+                    <SolidColorBrush x:Key="SurfaceContainer" Color="#141828" />
+                    <SolidColorBrush x:Key="SurfaceContainerHigh" Color="#1a2038" />
+                    <SolidColorBrush x:Key="SurfaceContainerHighest" Color="#222844" />
+                    <!-- Signal Protocol accents -->
+                    <SolidColorBrush x:Key="PrimaryAccent" Color="#3cd7ff" />
+                    <SolidColorBrush x:Key="PrimaryContainer" Color="#004e5f" />
+                    <SolidColorBrush x:Key="PrimaryDim" Color="#00c9f2" />
+                    <SolidColorBrush x:Key="OnSurface" Color="#e0e4ff" />
+                    <SolidColorBrush x:Key="OnSurfaceVariant" Color="#a4aac9" />
+                    <SolidColorBrush x:Key="TertiaryAccent" Color="#b5ffc2" />
+                    <SolidColorBrush x:Key="TertiaryContainer" Color="#3fff8b" />
+                    <SolidColorBrush x:Key="ErrorAccent" Color="#ee7d77" />
+                    <SolidColorBrush x:Key="ErrorContainer" Color="#7f2927" />
+                    <SolidColorBrush x:Key="SecondaryAccent" Color="#8ba1ac" />
+                    <SolidColorBrush x:Key="Outline" Color="#6e7492" />
+                    <SolidColorBrush x:Key="OutlineVariant" Color="#404762" />
+                    <!-- Sidebar -->
+                    <SolidColorBrush x:Key="SidebarBackground" Color="#0a0c14" />
+                    <SolidColorBrush x:Key="SidebarActiveText" Color="#3cd7ff" />
+                    <SolidColorBrush x:Key="SidebarInactiveText" Color="#8b90b0" />
+                    <SolidColorBrush x:Key="SidebarHover" Color="#151929" />
+                    <SolidColorBrush x:Key="OnPrimary" Color="#0c0e17" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="CardBackground" Color="#F5F5F5" />
-                    <SolidColorBrush x:Key="PanelBackground" Color="#FFFFFF" />
-                    <SolidColorBrush x:Key="PanelBorder" Color="#D0D0D0" />
-                    <SolidColorBrush x:Key="TabHeaderBackground" Color="#F0F0F0" />
-                    <SolidColorBrush x:Key="TextAreaBackground" Color="#FFFFFF" />
-                    <SolidColorBrush x:Key="TextAreaForeground" Color="#1E1E1E" />
-                    <SolidColorBrush x:Key="SplitterColor" Color="#C0C0C0" />
-                    <SolidColorBrush x:Key="InfoCardBackground" Color="#F0F0F0" />
-                    <SolidColorBrush x:Key="SstvPreviewBackground" Color="#F0F0F0" />
-                    <SolidColorBrush x:Key="PrimaryText" Color="#1E1E1E" />
-                    <SolidColorBrush x:Key="SecondaryText" Color="#555555" />
-                    <SolidColorBrush x:Key="TertiaryText" Color="#777777" />
+                    <!-- Legacy keys (updated to Signal Protocol Light palette) -->
+                    <SolidColorBrush x:Key="CardBackground" Color="#e8e9f0" />
+                    <SolidColorBrush x:Key="PanelBackground" Color="#f8f9fc" />
+                    <SolidColorBrush x:Key="PanelBorder" Color="#c4c6d9" />
+                    <SolidColorBrush x:Key="TabHeaderBackground" Color="#e8e9f0" />
+                    <SolidColorBrush x:Key="TextAreaBackground" Color="#f0f1f5" />
+                    <SolidColorBrush x:Key="TextAreaForeground" Color="#1a1c2e" />
+                    <SolidColorBrush x:Key="SplitterColor" Color="#c4c6d9" />
+                    <SolidColorBrush x:Key="InfoCardBackground" Color="#e0e2eb" />
+                    <SolidColorBrush x:Key="SstvPreviewBackground" Color="#f0f1f5" />
+                    <SolidColorBrush x:Key="PrimaryText" Color="#1a1c2e" />
+                    <SolidColorBrush x:Key="SecondaryText" Color="#44475e" />
+                    <SolidColorBrush x:Key="TertiaryText" Color="#757889" />
+                    <!-- Signal Protocol surface hierarchy -->
+                    <SolidColorBrush x:Key="SurfaceBase" Color="#f8f9fc" />
+                    <SolidColorBrush x:Key="SurfaceContainerLow" Color="#f0f1f5" />
+                    <SolidColorBrush x:Key="SurfaceContainer" Color="#e8e9f0" />
+                    <SolidColorBrush x:Key="SurfaceContainerHigh" Color="#e0e2eb" />
+                    <SolidColorBrush x:Key="SurfaceContainerHighest" Color="#d8dae5" />
+                    <!-- Signal Protocol accents -->
+                    <SolidColorBrush x:Key="PrimaryAccent" Color="#00687e" />
+                    <SolidColorBrush x:Key="PrimaryContainer" Color="#b8eaff" />
+                    <SolidColorBrush x:Key="PrimaryDim" Color="#004e5f" />
+                    <SolidColorBrush x:Key="OnSurface" Color="#1a1c2e" />
+                    <SolidColorBrush x:Key="OnSurfaceVariant" Color="#44475e" />
+                    <SolidColorBrush x:Key="TertiaryAccent" Color="#006d3a" />
+                    <SolidColorBrush x:Key="TertiaryContainer" Color="#a8f5b8" />
+                    <SolidColorBrush x:Key="ErrorAccent" Color="#ba1a1a" />
+                    <SolidColorBrush x:Key="ErrorContainer" Color="#ffdad6" />
+                    <SolidColorBrush x:Key="SecondaryAccent" Color="#4a6268" />
+                    <SolidColorBrush x:Key="Outline" Color="#757889" />
+                    <SolidColorBrush x:Key="OutlineVariant" Color="#c4c6d9" />
+                    <!-- Sidebar -->
+                    <SolidColorBrush x:Key="SidebarBackground" Color="#f0f1f5" />
+                    <SolidColorBrush x:Key="SidebarActiveText" Color="#00687e" />
+                    <SolidColorBrush x:Key="SidebarInactiveText" Color="#44475e" />
+                    <SolidColorBrush x:Key="SidebarHover" Color="#e0e2eb" />
+                    <SolidColorBrush x:Key="OnPrimary" Color="#ffffff" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>

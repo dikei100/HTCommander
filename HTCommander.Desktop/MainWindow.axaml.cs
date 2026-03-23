@@ -763,6 +763,61 @@ namespace HTCommander.Desktop
             await dialog.ShowDialog(this);
         }
 
+        private void SidebarNav_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (sender is not ListBox lb || lb.SelectedIndex < 0) return;
+            if (MainTabControl == null) return; // Not yet initialized during XAML load
+
+            {
+                MainTabControl.SelectedIndex = lb.SelectedIndex;
+
+                // Update header section name
+                if (HeaderSectionName != null && lb.SelectedItem is ListBoxItem item)
+                {
+                    string tag = item.Tag?.ToString() ?? "";
+                    string[] sectionSuffixes = { "HUB", "ROSTER", "LOG", "STREAM", "CONSOLE", "BOARD", "CENTER", "FILES", "DASHBOARD", "VIEW", "LOG" };
+                    int idx = lb.SelectedIndex;
+                    string suffix = idx < sectionSuffixes.Length ? sectionSuffixes[idx] : "";
+                    HeaderSectionName.Text = (tag.ToUpperInvariant() + " " + suffix).Trim();
+                }
+
+                // Update sidebar item foreground colors
+                this.TryFindResource("SidebarActiveText", this.ActualThemeVariant, out object activeObj);
+                this.TryFindResource("SidebarInactiveText", this.ActualThemeVariant, out object inactiveObj);
+                this.TryFindResource("PrimaryAccent", this.ActualThemeVariant, out object accentObj);
+                var activeBrush = activeObj as IBrush;
+                var inactiveBrush = inactiveObj as IBrush;
+                var accentBrush = accentObj as IBrush;
+
+                foreach (var child in lb.Items.OfType<ListBoxItem>())
+                {
+                    var border = child.Content as Border;
+                    if (border == null) continue;
+
+                    bool isSelected = child == lb.SelectedItem;
+                    var brush = isSelected ? activeBrush : inactiveBrush;
+
+                    // Set left pill indicator on active item
+                    border.BorderThickness = isSelected ? new Avalonia.Thickness(2, 0, 0, 0) : new Avalonia.Thickness(0);
+                    border.BorderBrush = isSelected ? accentBrush : null;
+
+                    // Update all TextBlock foregrounds in the border's content
+                    if (border.Child is StackPanel sp)
+                    {
+                        foreach (var spChild in sp.Children)
+                        {
+                            if (spChild is TextBlock tb && brush != null)
+                                tb.Foreground = brush;
+                        }
+                    }
+                    else if (border.Child is TextBlock singleTb && brush != null)
+                    {
+                        singleTb.Foreground = brush;
+                    }
+                }
+            }
+        }
+
         private void MenuRadioPanel_Click(object sender, RoutedEventArgs e)
         {
             bool show = !RadioPanel.IsVisible;

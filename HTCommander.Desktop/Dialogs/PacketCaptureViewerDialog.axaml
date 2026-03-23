@@ -4,7 +4,9 @@
         Title="Packet Capture Viewer"
         Width="500" Height="600"
         CanResize="True"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <Grid RowDefinitions="*,Auto,*" Margin="12">
         <DataGrid Name="PacketGrid" Grid.Row="0" IsReadOnly="True"
                   AutoGenerateColumns="False" SelectionChanged="PacketGrid_SelectionChanged">

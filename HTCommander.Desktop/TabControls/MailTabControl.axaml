@@ -2,65 +2,75 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="HTCommander.Desktop.TabControls.MailTabControl">
     <DockPanel>
-        <Border DockPanel.Dock="Top" Background="{DynamicResource TabHeaderBackground}" Height="46" Padding="10,0">
+        <!-- Header -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceContainer}" Height="46" Padding="14,0">
             <Grid>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
-                    <TextBlock Text="Mail" FontSize="14" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="12">
+                    <TextBlock Text="RADIO MAIL" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource OnSurface}" LetterSpacing="1" />
                     <TextBlock Name="WinlinkStatus" Text="" VerticalAlignment="Center"
-                               Foreground="#888" FontSize="11" />
+                               Foreground="{DynamicResource OnSurfaceVariant}" FontSize="11" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
-                            VerticalAlignment="Center" Spacing="4">
-                    <Button Name="ComposeButton" Content="Compose"
-                            Click="ComposeButton_Click" Padding="8,2" />
-                    <Button Name="ConnectButton" Content="Sync"
-                            Click="ConnectButton_Click" Padding="8,2" IsEnabled="False" />
+                            VerticalAlignment="Center" Spacing="6">
+                    <Button Name="ComposeButton" Content="COMPOSE MESSAGE"
+                            Click="ComposeButton_Click" Padding="12,4" FontSize="11" FontWeight="SemiBold"
+                            Background="{DynamicResource PrimaryAccent}" Foreground="{DynamicResource OnPrimary}" CornerRadius="4" />
+                    <Button Name="ConnectButton" Content="CHECK FOR MAIL"
+                            Click="ConnectButton_Click" Padding="12,4" IsEnabled="False" FontSize="11" />
                 </StackPanel>
             </Grid>
         </Border>
 
-        <Grid>
+        <Grid Margin="14,14,14,14">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="180" />
-                <ColumnDefinition Width="5" />
+                <ColumnDefinition Width="160" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- Mailbox tree -->
-            <TreeView Name="MailboxTree" Grid.Column="0" Background="{DynamicResource InfoCardBackground}"
-                      SelectionChanged="MailboxTree_SelectionChanged">
-                <TreeViewItem Header="Inbox" Tag="Inbox" IsExpanded="True" />
-                <TreeViewItem Header="Outbox" Tag="Outbox" />
-                <TreeViewItem Header="Draft" Tag="Draft" />
-                <TreeViewItem Header="Sent" Tag="Sent" />
-                <TreeViewItem Header="Archive" Tag="Archive" />
-                <TreeViewItem Header="Trash" Tag="Trash" />
-            </TreeView>
+            <!-- Mailbox folders -->
+            <Border Grid.Column="0" Background="{DynamicResource SurfaceContainer}" CornerRadius="8" Padding="8" Margin="0,0,7,0">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="FOLDERS" FontSize="9" Foreground="{DynamicResource OnSurfaceVariant}"
+                               LetterSpacing="1.5" Margin="8,4,0,10" />
+                    <TreeView Name="MailboxTree" Background="Transparent" BorderThickness="0"
+                              SelectionChanged="MailboxTree_SelectionChanged">
+                        <TreeViewItem Header="Inbox" Tag="Inbox" IsExpanded="True" />
+                        <TreeViewItem Header="Outbox" Tag="Outbox" />
+                        <TreeViewItem Header="Draft" Tag="Draft" />
+                        <TreeViewItem Header="Sent" Tag="Sent" />
+                        <TreeViewItem Header="Archive" Tag="Archive" />
+                        <TreeViewItem Header="Trash" Tag="Trash" />
+                    </TreeView>
+                </StackPanel>
+            </Border>
 
-            <GridSplitter Grid.Column="1" Width="5" Background="{DynamicResource SplitterColor}" />
+            <!-- Mail content area -->
+            <Grid Grid.Column="1" RowDefinitions="*,14,Auto" Margin="7,0,0,0">
+                <!-- Mail list -->
+                <Border Grid.Row="0" Background="{DynamicResource SurfaceContainer}" CornerRadius="8" Padding="0">
+                    <DataGrid Name="MailList" AutoGenerateColumns="False"
+                              IsReadOnly="True" SelectionChanged="MailList_SelectionChanged"
+                              Background="Transparent" BorderThickness="0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="From" Width="120" Binding="{Binding From}" />
+                            <DataGridTextColumn Header="Subject" Width="*" Binding="{Binding Subject}" />
+                            <DataGridTextColumn Header="Date" Width="140" Binding="{Binding DateStr}" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Border>
 
-            <!-- Mail content -->
-            <Grid Grid.Column="2">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="5" />
-                    <RowDefinition Height="200" />
-                </Grid.RowDefinitions>
-
-                <DataGrid Name="MailList" Grid.Row="0" AutoGenerateColumns="False"
-                          IsReadOnly="True" SelectionChanged="MailList_SelectionChanged">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="From" Width="120" Binding="{Binding From}" />
-                        <DataGridTextColumn Header="Subject" Width="*" Binding="{Binding Subject}" />
-                        <DataGridTextColumn Header="Date" Width="140" Binding="{Binding DateStr}" />
-                    </DataGrid.Columns>
-                </DataGrid>
-
-                <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" Background="{DynamicResource SplitterColor}" />
-
-                <TextBox Name="MailPreview" Grid.Row="2" IsReadOnly="True"
-                         AcceptsReturn="True" TextWrapping="Wrap"
-                         Background="{DynamicResource TextAreaBackground}" Foreground="{DynamicResource TextAreaForeground}" />
+                <!-- Message preview -->
+                <Border Grid.Row="2" Background="{DynamicResource SurfaceContainer}" CornerRadius="8"
+                        Padding="14,12" MinHeight="180">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="MESSAGE DETAIL" FontSize="9" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource OnSurfaceVariant}" LetterSpacing="1.5" Margin="0,0,0,8" />
+                        <TextBox Name="MailPreview" IsReadOnly="True"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 Background="Transparent" Foreground="{DynamicResource TextAreaForeground}"
+                                 BorderThickness="0" FontFamily="Consolas,Liberation Mono,monospace" FontSize="12" />
+                    </DockPanel>
+                </Border>
             </Grid>
         </Grid>
     </DockPanel>

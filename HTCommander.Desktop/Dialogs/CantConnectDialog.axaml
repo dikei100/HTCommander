@@ -4,7 +4,9 @@
         Title="Connection Failed"
         Width="400" Height="180"
         CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <StackPanel Margin="20" Spacing="12">
         <TextBlock Text="Unable to Connect" FontSize="16" FontWeight="SemiBold" />
         <TextBlock TextWrapping="Wrap"

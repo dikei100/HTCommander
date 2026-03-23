@@ -3,7 +3,9 @@
         x:Class="HTCommander.Desktop.Dialogs.SstvSendDialog"
         Title="Send SSTV Image"
         Width="500" Height="480"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <DockPanel Margin="12">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
@@ -19,7 +21,7 @@
                           SelectionChanged="ModeCombo_SelectionChanged" />
             </StackPanel>
 
-            <TextBlock Name="ModeInfoText" Text="" Foreground="#888" FontSize="11" Margin="80,0,0,0" />
+            <TextBlock Name="ModeInfoText" Text="" Foreground="{DynamicResource OnSurfaceVariant}" FontSize="11" Margin="80,0,0,0" />
 
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Content="Select Image..." Click="SelectImage_Click" Padding="8,4" />
@@ -28,7 +30,7 @@
             </StackPanel>
 
             <!-- Image preview -->
-            <Border Background="{DynamicResource CardBackground}" Height="260" CornerRadius="4">
+            <Border Background="{DynamicResource SurfaceContainer}" Height="260" CornerRadius="4">
                 <Image Name="PreviewImage" Stretch="Uniform" />
             </Border>
         </StackPanel>

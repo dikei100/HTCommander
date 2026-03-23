@@ -408,6 +408,31 @@ namespace HTCommander.Desktop.Dialogs
 
         #endregion
 
+        private StackPanel[] settingsPanels;
+
+        private void CategoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (settingsPanels == null)
+            {
+                settingsPanels = new StackPanel[]
+                {
+                    GeneralPanel, AprsPanel, VoicePanel, WinlinkPanel,
+                    ServersPanel, DataSourcesPanel, AudioPanel, ModemPanel
+                };
+            }
+
+            foreach (var panel in settingsPanels)
+            {
+                if (panel != null) panel.IsVisible = false;
+            }
+
+            int index = CategoryList.SelectedIndex;
+            if (index >= 0 && index < settingsPanels.Length && settingsPanels[index] != null)
+            {
+                settingsPanels[index].IsVisible = true;
+            }
+        }
+
         private void UpdateTransmitState()
         {
             string callSign = CallSignBox.Text?.Trim() ?? "";

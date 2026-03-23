@@ -4,7 +4,9 @@
         Title="Import Channels"
         Width="600" Height="420"
         CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <DockPanel Margin="12">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">

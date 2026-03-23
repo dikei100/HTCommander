@@ -4,7 +4,9 @@
         Title="Check for Updates"
         Width="450" Height="220"
         CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <StackPanel Margin="20" Spacing="12">
         <TextBlock Name="TitleText" Text="Checking for Updates..." FontSize="16" FontWeight="SemiBold" />
         <TextBlock Name="VersionInfo" TextWrapping="Wrap"

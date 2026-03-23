@@ -4,7 +4,9 @@
         Title="About HTCommander-X"
         Width="450" Height="340"
         CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <StackPanel Margin="20" Spacing="12">
         <TextBlock Text="HTCommander-X" FontSize="24" FontWeight="Bold" />
         <TextBlock Name="VersionText" Text="Version: ..." />

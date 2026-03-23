@@ -4,7 +4,9 @@
         Title="Log QSO"
         Width="460" Height="450"
         CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <DockPanel Margin="12">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
@@ -33,7 +35,7 @@
                     <TextBlock Grid.Row="3" Grid.Column="0" Text="Frequency (MHz):" VerticalAlignment="Center" Margin="0,6,0,0" />
                     <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="0,6,0,0">
                         <TextBox Name="FrequencyBox" Width="130" TextChanged="FrequencyBox_TextChanged" />
-                        <TextBlock Name="BandLabel" Text="" VerticalAlignment="Center" Foreground="#888" />
+                        <TextBlock Name="BandLabel" Text="" VerticalAlignment="Center" Foreground="{DynamicResource OnSurfaceVariant}" />
                     </StackPanel>
 
                     <TextBlock Grid.Row="4" Grid.Column="0" Text="Mode:" VerticalAlignment="Center" Margin="0,6,0,0" />

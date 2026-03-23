@@ -3,13 +3,13 @@
              xmlns:mapsui="clr-namespace:Mapsui.UI.Avalonia;assembly=Mapsui.UI.Avalonia"
              x:Class="HTCommander.Desktop.TabControls.MapTabControl">
     <DockPanel>
-        <Border DockPanel.Dock="Top" Background="{DynamicResource TabHeaderBackground}" Height="46" Padding="10,0">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceContainer}" Height="46" Padding="14,0">
             <Grid>
-                <TextBlock Text="Map" VerticalAlignment="Center"
-                           FontSize="14" FontWeight="SemiBold" />
+                <TextBlock Text="MAP VIEW" VerticalAlignment="Center"
+                           FontSize="13" FontWeight="Bold" Foreground="{DynamicResource OnSurface}" LetterSpacing="1" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
                             VerticalAlignment="Center" Spacing="4">
-                    <Button Content="Center" Click="CenterButton_Click" Padding="8,2" />
+                    <Button Content="Center" Click="CenterButton_Click" Padding="12,4" CornerRadius="4" />
                     <CheckBox Name="ShowAirplanesCheck" Content="Airplanes"
                               IsChecked="True" Click="ShowAirplanes_Click" />
                     <CheckBox Name="ShowAprsCheck" Content="APRS Stations"
@@ -18,6 +18,8 @@
             </Grid>
         </Border>
 
-        <mapsui:MapControl Name="MapControl" />
+        <Border Background="{DynamicResource SurfaceContainer}" CornerRadius="8" Margin="14" ClipToBounds="True">
+            <mapsui:MapControl Name="MapControl" />
+        </Border>
     </DockPanel>
 </UserControl>

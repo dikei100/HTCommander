@@ -4,7 +4,9 @@
         Title="APRS Route"
         Width="400" Height="200"
         WindowStartupLocation="CenterOwner"
-        CanResize="False">
+        CanResize="False"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <StackPanel Margin="16" Spacing="12">
         <Grid ColumnDefinitions="80,*" RowDefinitions="Auto,Auto">
             <TextBlock Grid.Row="0" Grid.Column="0" Text="Name:" VerticalAlignment="Center" />

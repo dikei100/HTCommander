@@ -3,7 +3,9 @@
         x:Class="HTCommander.Desktop.Dialogs.RepeaterBookDialog"
         Title="Import from RepeaterBook"
         Width="860" Height="620"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <DockPanel Margin="12">
         <!-- Bottom: Import controls -->
         <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto" Margin="0,10,0,0">

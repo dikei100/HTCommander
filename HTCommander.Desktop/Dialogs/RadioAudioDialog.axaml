@@ -7,7 +7,9 @@
         WindowStartupLocation="CenterOwner"
         Focusable="True"
         KeyDown="Window_KeyDown"
-        KeyUp="Window_KeyUp">
+        KeyUp="Window_KeyUp"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <DockPanel Margin="16">
         <Button DockPanel.Dock="Bottom" Content="Close" Click="CloseButton_Click"
                 HorizontalAlignment="Right" Padding="16,6" Margin="0,12,0,0" />
@@ -15,21 +17,21 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Spacing="16">
             <!-- Audio streaming toggle -->
-            <Border Background="{DynamicResource CardBackground}" Padding="12" CornerRadius="4">
+            <Border Background="{DynamicResource SurfaceContainer}" Padding="12" CornerRadius="4">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Audio Streaming" FontWeight="SemiBold" FontSize="14" />
                     <CheckBox Name="AudioEnabledCheck" Content="Enable Audio"
                               Click="AudioEnabled_Click" />
-                    <TextBlock Name="AudioStatusText" Text="" Foreground="#888" FontSize="11" />
+                    <TextBlock Name="AudioStatusText" Text="" Foreground="{DynamicResource OnSurfaceVariant}" FontSize="11" />
                 </StackPanel>
             </Border>
 
             <!-- Radio volume (hardware 0-15) -->
-            <Border Background="{DynamicResource CardBackground}" Padding="12" CornerRadius="4">
+            <Border Background="{DynamicResource SurfaceContainer}" Padding="12" CornerRadius="4">
                 <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Text="Radio Volume" FontWeight="SemiBold" FontSize="14" />
-                        <TextBlock Name="VolumeValueText" Grid.Column="1" Text="0" Foreground="#888" />
+                        <TextBlock Name="VolumeValueText" Grid.Column="1" Text="0" Foreground="{DynamicResource OnSurfaceVariant}" />
                     </Grid>
                     <Slider Name="VolumeSlider" Minimum="0" Maximum="15"
                             TickFrequency="1" IsSnapToTickEnabled="True"
@@ -38,11 +40,11 @@
             </Border>
 
             <!-- Squelch (0-9) -->
-            <Border Background="{DynamicResource CardBackground}" Padding="12" CornerRadius="4">
+            <Border Background="{DynamicResource SurfaceContainer}" Padding="12" CornerRadius="4">
                 <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Text="Squelch Level" FontWeight="SemiBold" FontSize="14" />
-                        <TextBlock Name="SquelchValueText" Grid.Column="1" Text="0" Foreground="#888" />
+                        <TextBlock Name="SquelchValueText" Grid.Column="1" Text="0" Foreground="{DynamicResource OnSurfaceVariant}" />
                     </Grid>
                     <Slider Name="SquelchSlider" Minimum="0" Maximum="9"
                             TickFrequency="1" IsSnapToTickEnabled="True"
@@ -51,11 +53,11 @@
             </Border>
 
             <!-- Software output volume (0-100) -->
-            <Border Background="{DynamicResource CardBackground}" Padding="12" CornerRadius="4">
+            <Border Background="{DynamicResource SurfaceContainer}" Padding="12" CornerRadius="4">
                 <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Text="Output Volume" FontWeight="SemiBold" FontSize="14" />
-                        <TextBlock Name="OutputVolumeText" Grid.Column="1" Text="100%" Foreground="#888" />
+                        <TextBlock Name="OutputVolumeText" Grid.Column="1" Text="100%" Foreground="{DynamicResource OnSurfaceVariant}" />
                     </Grid>
                     <Slider Name="OutputVolumeSlider" Minimum="0" Maximum="100"
                             TickFrequency="1" IsSnapToTickEnabled="True"
@@ -65,25 +67,25 @@
             </Border>
 
             <!-- Mic Gain -->
-            <Border Background="{DynamicResource CardBackground}" Padding="12" CornerRadius="4">
+            <Border Background="{DynamicResource SurfaceContainer}" Padding="12" CornerRadius="4">
                 <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBlock Text="Mic Gain" FontWeight="SemiBold" FontSize="14" />
-                        <TextBlock Name="MicGainText" Grid.Column="1" Text="100%" Foreground="#888" />
+                        <TextBlock Name="MicGainText" Grid.Column="1" Text="100%" Foreground="{DynamicResource OnSurfaceVariant}" />
                     </Grid>
                     <Slider Name="MicGainSlider" Minimum="0" Maximum="200"
                             TickFrequency="1" IsSnapToTickEnabled="True"
                             Value="100"
                             ValueChanged="MicGainSlider_Changed" />
-                    <TextBlock Text="0% = mute, 100% = normal, 200% = 2x boost" Foreground="#666" FontSize="10" />
+                    <TextBlock Text="0% = mute, 100% = normal, 200% = 2x boost" Foreground="{DynamicResource Outline}" FontSize="10" />
                 </StackPanel>
             </Border>
 
             <!-- Microphone Transmit -->
-            <Border Background="{DynamicResource CardBackground}" Padding="12" CornerRadius="4">
+            <Border Background="{DynamicResource SurfaceContainer}" Padding="12" CornerRadius="4">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Microphone Transmit" FontWeight="SemiBold" FontSize="14" />
-                    <TextBlock Name="MicStatusText" Text="Hold button to transmit" Foreground="#888" FontSize="11" />
+                    <TextBlock Name="MicStatusText" Text="Hold button to transmit" Foreground="{DynamicResource OnSurfaceVariant}" FontSize="11" />
                     <Border Name="TransmitButton" Height="48" CornerRadius="4"
                             Background="{DynamicResource SplitterColor}" Cursor="Hand"
                             PointerPressed="TransmitButton_PointerPressed"
@@ -92,23 +94,23 @@
                                    Foreground="White" HorizontalAlignment="Center"
                                    VerticalAlignment="Center" />
                     </Border>
-                    <TextBlock Text="Or hold Space key while this window is focused" Foreground="#666" FontSize="10" />
+                    <TextBlock Text="Or hold Space key while this window is focused" Foreground="{DynamicResource Outline}" FontSize="10" />
                 </StackPanel>
             </Border>
             <!-- Transmit Audio File -->
-            <Border Background="{DynamicResource CardBackground}" Padding="12" CornerRadius="4">
+            <Border Background="{DynamicResource SurfaceContainer}" Padding="12" CornerRadius="4">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Transmit Audio File" FontWeight="SemiBold" FontSize="14" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Name="SelectWavButton" Content="Select WAV..." Click="SelectWav_Click" Padding="8,4" />
                         <TextBlock Name="WavFileName" Text="No file selected" VerticalAlignment="Center"
-                                   Foreground="#888" />
+                                   Foreground="{DynamicResource OnSurfaceVariant}" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Name="TransmitWavButton" Content="Transmit" Click="TransmitWav_Click"
                                 Padding="12,4" IsEnabled="False" />
                         <TextBlock Name="WavStatusText" Text="" VerticalAlignment="Center"
-                                   Foreground="#888" FontSize="11" />
+                                   Foreground="{DynamicResource OnSurfaceVariant}" FontSize="11" />
                     </StackPanel>
                 </StackPanel>
             </Border>

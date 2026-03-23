@@ -4,7 +4,9 @@
         Title="Select Channel"
         Width="400" Height="500"
         WindowStartupLocation="CenterOwner"
-        CanResize="True">
+        CanResize="True"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <DockPanel Margin="12">
         <TextBlock Name="TitleText" DockPanel.Dock="Top" Text="Select a channel for VFO A:"
                    FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />

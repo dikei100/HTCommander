@@ -3,7 +3,9 @@
         x:Class="HTCommander.Desktop.Dialogs.ImagePreviewDialog"
         Title="Image Preview"
         Width="600" Height="500"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <DockPanel Margin="4">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8" Margin="4,8,4,4">

@@ -4,7 +4,9 @@
         Title="Bluetooth Access Denied"
         Width="440" Height="220"
         CanResize="False"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <StackPanel Margin="20" Spacing="12">
         <TextBlock Text="Bluetooth Access Denied" FontSize="16" FontWeight="SemiBold" />
         <TextBlock TextWrapping="Wrap"

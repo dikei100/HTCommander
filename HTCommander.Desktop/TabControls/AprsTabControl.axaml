@@ -2,12 +2,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="HTCommander.Desktop.TabControls.AprsTabControl">
     <DockPanel>
-        <Border DockPanel.Dock="Top" Background="{DynamicResource TabHeaderBackground}" Height="46" Padding="10,0">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceContainer}" Height="46" Padding="14,0">
             <Grid>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
-                    <TextBlock Text="APRS" FontSize="14" FontWeight="SemiBold" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="12">
+                    <TextBlock Text="APRS DASHBOARD" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource OnSurface}" LetterSpacing="1" />
                     <TextBlock Name="CallSignLabel" Text="" FontWeight="Bold"
-                               Foreground="#4FC3F7" VerticalAlignment="Center" />
+                               Foreground="{DynamicResource PrimaryAccent}" VerticalAlignment="Center" FontSize="12" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
                             VerticalAlignment="Center" Spacing="4">
@@ -27,44 +27,45 @@
         </Border>
 
         <!-- Transmit bar at bottom -->
-        <Grid DockPanel.Dock="Bottom" Height="40" Margin="4"
-              Name="TransmitPanel" IsVisible="False">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <ComboBox Name="RouteCombo" Grid.Column="0" Width="120" Margin="0,0,4,0" />
-            <AutoCompleteBox Name="DestCombo" Grid.Column="1" Width="140" Margin="0,0,4,0"
-                               Watermark="Destination" FilterMode="StartsWith" />
-            <TextBox Name="AprsMessageBox" Grid.Column="2" Watermark="APRS message..."
-                     KeyDown="AprsMessageBox_KeyDown" />
-            <Button Name="SendAprsButton" Grid.Column="3" Content="Send"
-                    Click="SendAprsButton_Click" Padding="12,2" Margin="4,0,0,0" IsEnabled="False" />
-        </Grid>
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource SurfaceContainerLow}"
+                Padding="14,8" Name="TransmitPanel" IsVisible="False">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                <ComboBox Name="RouteCombo" Grid.Column="0" Width="120" Margin="0,0,8,0" />
+                <AutoCompleteBox Name="DestCombo" Grid.Column="1" Width="140" Margin="0,0,8,0"
+                                   Watermark="Destination" FilterMode="StartsWith" />
+                <TextBox Name="AprsMessageBox" Grid.Column="2" Watermark="APRS message..."
+                         KeyDown="AprsMessageBox_KeyDown" />
+                <Button Name="SendAprsButton" Grid.Column="3" Content="Send"
+                        Click="SendAprsButton_Click" Padding="16,6" Margin="8,0,0,0" IsEnabled="False"
+                        Background="{DynamicResource PrimaryAccent}" Foreground="{DynamicResource OnPrimary}"
+                        FontWeight="SemiBold" CornerRadius="4" />
+            </Grid>
+        </Border>
 
         <!-- Message list -->
-        <DataGrid Name="AprsGrid" AutoGenerateColumns="False"
-                  IsReadOnly="True" CanUserSortColumns="True">
-            <DataGrid.ContextMenu>
-                <ContextMenu>
-                    <MenuItem Name="AprsDetailsItem" Header="Details..." Click="AprsDetails_Click" />
-                    <MenuItem Name="AprsShowLocationItem" Header="Show Location..." Click="AprsShowLocation_Click" />
-                    <MenuItem Name="AprsCopyMessageItem" Header="Copy Message" Click="AprsCopyMessage_Click" />
-                    <MenuItem Name="AprsCopyCallsignItem" Header="Copy Callsign" Click="AprsCopyCallsign_Click" />
-                    <Separator />
-                    <MenuItem Name="AprsSmsItem" Header="SMS Message..." Click="AprsSms_Click" />
-                    <MenuItem Name="AprsWeatherItem" Header="Weather Report..." Click="AprsWeather_Click" />
-                </ContextMenu>
-            </DataGrid.ContextMenu>
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Time" Width="80" Binding="{Binding Time}" />
-                <DataGridTextColumn Header="From" Width="100" Binding="{Binding From}" />
-                <DataGridTextColumn Header="To" Width="120" Binding="{Binding To}" />
-                <DataGridTextColumn Header="Type" Width="70" Binding="{Binding Type}" />
-                <DataGridTextColumn Header="Message" Width="*" Binding="{Binding Message}" />
-            </DataGrid.Columns>
-        </DataGrid>
+        <Border Background="{DynamicResource SurfaceContainer}" CornerRadius="8" Margin="14,14,14,14" ClipToBounds="True">
+            <DataGrid Name="AprsGrid" AutoGenerateColumns="False"
+                      IsReadOnly="True" CanUserSortColumns="True"
+                      Background="Transparent" BorderThickness="0">
+                <DataGrid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Name="AprsDetailsItem" Header="Details..." Click="AprsDetails_Click" />
+                        <MenuItem Name="AprsShowLocationItem" Header="Show Location..." Click="AprsShowLocation_Click" />
+                        <MenuItem Name="AprsCopyMessageItem" Header="Copy Message" Click="AprsCopyMessage_Click" />
+                        <MenuItem Name="AprsCopyCallsignItem" Header="Copy Callsign" Click="AprsCopyCallsign_Click" />
+                        <Separator />
+                        <MenuItem Name="AprsSmsItem" Header="SMS Message..." Click="AprsSms_Click" />
+                        <MenuItem Name="AprsWeatherItem" Header="Weather Report..." Click="AprsWeather_Click" />
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Time" Width="80" Binding="{Binding Time}" />
+                    <DataGridTextColumn Header="From" Width="100" Binding="{Binding From}" />
+                    <DataGridTextColumn Header="To" Width="120" Binding="{Binding To}" />
+                    <DataGridTextColumn Header="Type" Width="70" Binding="{Binding Type}" />
+                    <DataGridTextColumn Header="Message" Width="*" Binding="{Binding Message}" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
     </DockPanel>
 </UserControl>

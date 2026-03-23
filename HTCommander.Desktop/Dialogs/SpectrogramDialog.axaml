@@ -3,7 +3,9 @@
         x:Class="HTCommander.Desktop.Dialogs.SpectrogramDialog"
         Title="Spectrogram"
         Width="700" Height="400"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource SurfaceBase}"
+        FontFamily="Inter">
     <DockPanel Margin="4">
         <!-- Top toolbar -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource TabHeaderBackground}" Padding="6,4" Margin="0,0,0,4">

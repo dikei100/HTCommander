@@ -3,10 +3,10 @@
              x:Class="HTCommander.Desktop.TabControls.DebugTabControl">
     <DockPanel>
         <!-- Header panel -->
-        <Border DockPanel.Dock="Top" Background="{DynamicResource TabHeaderBackground}" Height="46" Padding="10,0">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceContainer}" Height="46" Padding="14,0">
             <Grid>
-                <TextBlock Text="Developer Debug" VerticalAlignment="Center"
-                           FontSize="14" FontWeight="SemiBold" />
+                <TextBlock Text="DEBUG CONSOLE" VerticalAlignment="Center"
+                           FontSize="13" FontWeight="Bold" Foreground="{DynamicResource OnSurface}" LetterSpacing="1" />
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"
                             VerticalAlignment="Center" Spacing="4">
                     <CheckBox Name="ShowBtFrames" Content="BT Frames"
@@ -15,16 +15,19 @@
                     <CheckBox Name="LoopbackCheck" Content="Loopback"
                               Click="Loopback_Click" />
                     <Button Name="ClearButton" Content="Clear" Click="ClearButton_Click"
-                            Padding="8,2" />
+                            Padding="12,4" CornerRadius="4" />
                     <Button Name="SaveButton" Content="Save" Click="SaveButton_Click"
-                            Padding="8,2" />
+                            Padding="12,4" CornerRadius="4" />
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- Log output -->
-        <TextBox Name="DebugLog" IsReadOnly="True" AcceptsReturn="True"
-                 TextWrapping="NoWrap" FontFamily="Consolas,Courier New,monospace"
-                 FontSize="12" Background="{DynamicResource TextAreaBackground}" Foreground="{DynamicResource TextAreaForeground}" />
+        <Border Background="{DynamicResource SurfaceContainerLow}" CornerRadius="8" Margin="14" Padding="14,12">
+            <TextBox Name="DebugLog" IsReadOnly="True" AcceptsReturn="True"
+                     TextWrapping="NoWrap" FontFamily="Consolas,Courier New,monospace"
+                     FontSize="12" Background="Transparent" BorderThickness="0"
+                     Foreground="{DynamicResource OnSurfaceVariant}" />
+        </Border>
     </DockPanel>
 </UserControl>
