@@ -405,12 +405,38 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
     return -1;
   }
 
-  /// Sends GAIA GET_DEV_ID and checks for a valid FF 01 response via poll().
+  /// Sends GAIA GET_DEV_ID and checks for a valid FF 01 response.
+  /// Blocks SIGPROF around all syscalls to prevent EINTR.
   static bool _verifyGaiaResponse(int fd, int channel, SendPort toMain) {
-    // Build GET_DEV_ID: group=BASIC(2), cmd=1
+    // Block SIGPROF for the entire verification sequence
+    final blockSet = calloc<Uint8>(sigsetSize);
+    final oldSet = calloc<Uint8>(sigsetSize);
+    NativeMethods.sigemptyset(blockSet);
+    NativeMethods.sigaddset(blockSet, sigprof);
+    NativeMethods.sigaddset(blockSet, sigalrm);
+    NativeMethods.sigprocmask(sigBlock, blockSet, oldSet);
+
+    try {
+      return _verifyGaiaResponseInner(fd, channel, toMain);
+    } finally {
+      // Restore signals
+      NativeMethods.sigprocmask(sigUnblock, blockSet, nullptr.cast<Uint8>());
+      calloc.free(blockSet);
+      calloc.free(oldSet);
+    }
+  }
+
+  static bool _verifyGaiaResponseInner(int fd, int channel, SendPort toMain) {
+    // Build GET_DEV_ID: group=BASIC(2), cmd=GET_DEV_ID(1)
+    // Command payload: [group_hi=0x00, group_lo=0x02, cmd_hi=0x00, cmd_lo=0x01]
     final gaiaCmd =
         GaiaProtocol.encode(Uint8List.fromList([0x00, 0x02, 0x00, 0x01]));
 
+    // Log the exact bytes we're sending
+    final hexStr = gaiaCmd.map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase()).join(' ');
+    _debug(toMain, 'Ch $channel: sending GAIA GET_DEV_ID: $hexStr (${gaiaCmd.length} bytes)');
+
+    // Write
     final writeBuf = calloc<Uint8>(gaiaCmd.length);
     try {
       for (int i = 0; i < gaiaCmd.length; i++) {
@@ -418,20 +444,31 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
       }
       final sent =
           NativeMethods.write(fd, writeBuf.cast<Void>(), gaiaCmd.length);
-      if (sent < 0) return false;
+      if (sent < 0) {
+        _debug(toMain, 'Ch $channel: write failed errno=${NativeMethods.errno}');
+        return false;
+      }
+      _debug(toMain, 'Ch $channel: wrote $sent bytes');
     } finally {
       calloc.free(writeBuf);
     }
 
-    // Poll for response with 3-second timeout
+    // Poll for response with 5-second timeout
     final pfd = calloc<PollFd>();
     try {
       pfd.ref.fd = fd;
       pfd.ref.events = pollin;
       pfd.ref.revents = 0;
 
-      final pollResult = NativeMethods.poll(pfd, 1, 3000);
-      if (pollResult <= 0) return false;
+      final pollResult = NativeMethods.poll(pfd, 1, 5000);
+      _debug(toMain, 'Ch $channel: poll=$pollResult, revents=0x${pfd.ref.revents.toRadixString(16)}');
+
+      if (pollResult <= 0) {
+        if (pollResult < 0) {
+          _debug(toMain, 'Ch $channel: poll errno=${NativeMethods.errno}');
+        }
+        return false;
+      }
 
       if ((pfd.ref.revents & (pollerr | pollhup | pollnval)) != 0) {
         return false;
@@ -443,15 +480,24 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
     }
 
     // Read response
-    final readSize = 1024;
-    final readBuf = calloc<Uint8>(readSize);
+    final readBuf = calloc<Uint8>(1024);
     try {
       final bytesRead =
-          NativeMethods.read(fd, readBuf.cast<Void>(), readSize);
-      if (bytesRead < 2) return false;
+          NativeMethods.read(fd, readBuf.cast<Void>(), 1024);
+      if (bytesRead <= 0) {
+        _debug(toMain, 'Ch $channel: read returned $bytesRead, errno=${NativeMethods.errno}');
+        return false;
+      }
+
+      // Log response bytes
+      final respHex = List.generate(
+        bytesRead > 32 ? 32 : bytesRead,
+        (i) => readBuf[i].toRadixString(16).padLeft(2, '0').toUpperCase(),
+      ).join(' ');
+      _debug(toMain, 'Ch $channel: received $bytesRead bytes: $respHex');
 
       // Verify GAIA header: FF 01
-      return readBuf[0] == 0xFF && readBuf[1] == 0x01;
+      return bytesRead >= 2 && readBuf[0] == 0xFF && readBuf[1] == 0x01;
     } finally {
       calloc.free(readBuf);
     }

@@ -51,7 +51,11 @@ class SharedPrefsSettingsStore implements SettingsStore {
 
   @override
   bool readBool(String key, bool defaultValue) {
-    return _prefs.getBool(key) ?? defaultValue;
+    // Handle both bool and int (0/1) storage for cross-compat with C# app
+    final val = _prefs.get(key);
+    if (val is bool) return val;
+    if (val is int) return val != 0;
+    return defaultValue;
   }
 
   @override
