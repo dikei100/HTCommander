@@ -50,13 +50,57 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
     super.initState();
     _broker = DataBrokerClient();
 
+    // Load current state from DataBroker (screen may be rebuilt on tab switch)
+    _loadCurrentState();
+
     _broker.subscribe(100, 'State', _onState);
     _broker.subscribe(100, 'Info', _onInfo);
+    _broker.subscribe(100, 'FriendlyName', _onFriendlyName);
     _broker.subscribe(100, 'HtStatus', _onHtStatus);
     _broker.subscribe(100, 'Settings', _onSettings);
     _broker.subscribe(100, 'Channels', _onChannels);
     _broker.subscribe(100, 'BatteryAsPercentage', _onBattery);
     _broker.subscribe(100, 'Position', _onPosition);
+  }
+
+  void _loadCurrentState() {
+    final state = _broker.getValue<String>(100, 'State', '');
+    _isConnected = state.toLowerCase() == 'connected';
+
+    final friendlyName = _broker.getValue<String>(100, 'FriendlyName', '');
+    if (friendlyName.isNotEmpty) {
+      _deviceName = friendlyName;
+    } else {
+      final info = _broker.getValueDynamic(100, 'Info');
+      if (info is RadioDevInfo) {
+        _deviceName = 'Radio ${info.productId}';
+      }
+    }
+
+    final htStatus = _broker.getValueDynamic(100, 'HtStatus');
+    if (htStatus is RadioHtStatus) {
+      _rssi = htStatus.rssi;
+      _isTransmitting = htStatus.isInTx;
+    }
+
+    final settings = _broker.getValueDynamic(100, 'Settings');
+    if (settings is RadioSettings) {
+      _settings = settings;
+    }
+
+    final channels = _broker.getValueDynamic(100, 'Channels');
+    if (channels is List) {
+      _channels = channels.cast<RadioChannelInfo?>();
+    }
+
+    _batteryPercent = _broker.getValue<int>(100, 'BatteryAsPercentage', 0);
+
+    final pos = _broker.getValueDynamic(100, 'Position');
+    if (pos is RadioPosition) {
+      _isGpsLocked = pos.isGpsLocked;
+    }
+
+    _updateVfoFromChannels();
   }
 
   @override
@@ -75,10 +119,15 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
 
   void _onInfo(int deviceId, String name, Object? data) {
     if (!mounted || data is! RadioDevInfo) return;
-    setState(() {
-      // Build a human-readable device name from product/vendor IDs
-      _deviceName = 'Radio ${data.productId}';
-    });
+    // Only set from Info if we don't already have a friendly name
+    if (_deviceName == null || _deviceName!.startsWith('Radio ')) {
+      setState(() => _deviceName = 'Radio ${data.productId}');
+    }
+  }
+
+  void _onFriendlyName(int deviceId, String name, Object? data) {
+    if (!mounted || data is! String || data.isEmpty) return;
+    setState(() => _deviceName = data);
   }
 
   void _onHtStatus(int deviceId, String name, Object? data) {

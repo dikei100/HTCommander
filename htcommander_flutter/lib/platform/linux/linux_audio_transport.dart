@@ -51,9 +51,9 @@ class LinuxRadioAudioTransport extends RadioAudioTransport {
       }
     }
 
-    // Step 2: Probe channels 1-10
+    // Step 2: Probe channels 1-30
     if (_rfcommFd < 0) {
-      for (int ch = 1; ch <= 10; ch++) {
+      for (int ch = 1; ch <= 30; ch++) {
         final fd = _createRfcommFd(bdaddr, ch);
         if (fd >= 0) {
           _rfcommFd = fd;
@@ -65,7 +65,7 @@ class LinuxRadioAudioTransport extends RadioAudioTransport {
     // Step 3: Retry with more delay
     if (_rfcommFd < 0) {
       await Future<void>.delayed(const Duration(seconds: 3));
-      for (int ch = 1; ch <= 10; ch++) {
+      for (int ch = 1; ch <= 30; ch++) {
         final fd = _createRfcommFd(bdaddr, ch);
         if (fd >= 0) {
           _rfcommFd = fd;
@@ -250,14 +250,34 @@ class LinuxRadioAudioTransport extends RadioAudioTransport {
     if (fd < 0) return -1;
 
     final addr = buildSockaddrRc(bdaddr, channel);
+
+    // Block SIGPROF around connect() — Dart VM's profiler sends SIGPROF
+    // which interrupts blocking syscalls with EINTR on RFCOMM sockets.
+    final blockSet = calloc<Uint8>(sigsetSize);
+    final oldSet = calloc<Uint8>(sigsetSize);
+
     try {
-      final result = NativeMethods.connect(fd, addr.cast<Void>(), 10);
+      NativeMethods.sigemptyset(blockSet);
+      NativeMethods.sigaddset(blockSet, sigprof);
+      NativeMethods.sigaddset(blockSet, sigalrm);
+      NativeMethods.sigprocmask(sigBlock, blockSet, oldSet);
+
+      int result;
+      try {
+        result = NativeMethods.connect(fd, addr.cast<Void>(), 10);
+      } finally {
+        // Restore original signal mask
+        NativeMethods.sigprocmask(sigBlock, oldSet, nullptr.cast<Uint8>());
+      }
+
       if (result < 0) {
         NativeMethods.close(fd);
         return -1;
       }
     } finally {
       calloc.free(addr);
+      calloc.free(blockSet);
+      calloc.free(oldSet);
     }
 
     return fd;

@@ -33,20 +33,20 @@ const int econnrefused = 111;
 /// errno: Host is down.
 const int ehostdown = 112;
 
-/// poll() event: there is data to read.
+/// poll() event: there is data to read (POLLIN = 0x0001).
 const int pollin = 1;
 
-/// poll() event: error condition.
-const int pollerr = 4;
-
-/// poll() event: hang up.
-const int pollhup = 8;
-
-/// poll() event: invalid request.
-const int pollnval = 16;
-
-/// poll() event: writable (for connect completion).
+/// poll() event: writable (POLLOUT = 0x0004).
 const int pollout = 4;
+
+/// poll() event: error condition (POLLERR = 0x0008, output-only).
+const int pollerr = 8;
+
+/// poll() event: hang up (POLLHUP = 0x0010, output-only).
+const int pollhup = 16;
+
+/// poll() event: invalid request (POLLNVAL = 0x0020, output-only).
+const int pollnval = 32;
 
 /// SOL_SOCKET level for getsockopt.
 const int solSocket = 1;

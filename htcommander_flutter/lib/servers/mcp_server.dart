@@ -11,6 +11,13 @@ import 'dart:typed_data';
 
 import '../core/data_broker.dart';
 import '../core/data_broker_client.dart';
+import '../handlers/log_store.dart';
+import '../radio/radio.dart' as ht;
+import '../radio/models/radio_dev_info.dart';
+import '../radio/models/radio_channel_info.dart';
+import '../radio/models/radio_settings.dart';
+import '../radio/models/radio_ht_status.dart';
+import '../radio/models/radio_position.dart';
 import 'http_server.dart';
 
 /// MCP (Model Context Protocol) HTTP server for AI-powered radio control.
@@ -319,6 +326,10 @@ class McpServer {
         'Get device information for a connected radio.',
         props: {'device_id': deviceIdProp},
         required: ['device_id']));
+    tools.add(_toolDef('get_radio_settings',
+        'Get current radio settings including VFO frequencies, squelch, volume.',
+        props: {'device_id': deviceIdProp},
+        required: ['device_id']));
     tools.add(_toolDef('get_channels',
         'Get all programmed channel configurations for a radio.',
         props: {'device_id': deviceIdProp},
@@ -372,6 +383,13 @@ class McpServer {
         props: {'device_id': deviceIdProp},
         required: ['device_id']));
 
+    // Debug tools
+    tools.add(_toolDef('get_logs',
+        'Get recent application log entries.',
+        props: {
+          'count': prop('integer', 'Max entries (default 50)', minimum: 1, maximum: 500),
+        }));
+
     // Settings tools
     final settingNames = List<String>.from(_settingsWhitelist)..sort();
     tools.add(_toolDef('get_setting',
@@ -415,20 +433,18 @@ class McpServer {
           return _toolResult(
               _broker.getValue<String>(_intArg(args, 'device_id'), 'State', 'Unknown'));
         case 'get_radio_info':
-          final info = _broker.getValueDynamic(_intArg(args, 'device_id'), 'Info');
-          return _toolResult(info?.toString() ?? 'No radio info available');
+          return _toolResult(_serializeRadioInfo(_intArg(args, 'device_id')));
+        case 'get_radio_settings':
+          return _toolResult(_serializeRadioSettings(_intArg(args, 'device_id')));
         case 'get_channels':
-          final channels = _broker.getValueDynamic(_intArg(args, 'device_id'), 'Channels');
-          return _toolResult(channels?.toString() ?? 'No channel data available');
+          return _toolResult(_serializeChannels(_intArg(args, 'device_id')));
         case 'get_gps_position':
-          final pos = _broker.getValueDynamic(_intArg(args, 'device_id'), 'Position');
-          return _toolResult(pos?.toString() ?? 'No GPS position available');
+          return _toolResult(_serializePosition(_intArg(args, 'device_id')));
         case 'get_battery':
           final batt = _broker.getValue<int>(_intArg(args, 'device_id'), 'BatteryAsPercentage', -1);
           return _toolResult(batt < 0 ? 'No battery data' : '$batt%');
         case 'get_ht_status':
-          final status = _broker.getValueDynamic(_intArg(args, 'device_id'), 'HtStatus');
-          return _toolResult(status?.toString() ?? 'No HT status available');
+          return _toolResult(_serializeHtStatus(_intArg(args, 'device_id')));
         case 'set_vfo_channel':
           final deviceId = _intArg(args, 'device_id');
           final vfo = _stringArg(args, 'vfo');
@@ -456,6 +472,8 @@ class McpServer {
           final deviceId = _intArg(args, 'device_id');
           _broker.dispatch(1, 'McpDisconnectRadio', deviceId, store: false);
           return _toolResult('Disconnect requested for device $deviceId');
+        case 'get_logs':
+          return _callGetLogs(args);
         case 'get_setting':
           final settingName = _stringArg(args, 'name');
           if (!_settingsWhitelist.contains(settingName)) {
@@ -490,8 +508,13 @@ class McpServer {
     if (radios is List) {
       final radioList = <Map<String, dynamic>>[];
       for (final item in radios) {
-        if (item is Map) {
-          radioList.add(Map<String, dynamic>.from(item));
+        if (item is ht.Radio) {
+          radioList.add({
+            'device_id': item.deviceId,
+            'mac_address': item.macAddress,
+            'state': _broker.getValue<String>(item.deviceId, 'State', 'Unknown'),
+            'friendly_name': _broker.getValue<String>(item.deviceId, 'FriendlyName', 'Radio'),
+          });
         }
       }
       return _toolResult(jsonEncode(radioList));
@@ -560,15 +583,129 @@ class McpServer {
     };
   }
 
+  Map<String, dynamic> _callGetLogs(Map<String, dynamic> args) {
+    final count = (args['count'] as num?)?.toInt() ?? 50;
+    final handler = DataBroker.getDataHandler('LogStore');
+    if (handler is LogStore) {
+      final entries = handler.entries;
+      final start = entries.length > count ? entries.length - count : 0;
+      final lines = entries
+          .skip(start)
+          .map((e) => e.toString())
+          .join('\n');
+      return _toolResult(lines.isEmpty ? '(no logs)' : lines);
+    }
+    return _toolResult('(log store not available)');
+  }
+
+  // --- Data serializers ---
+
+  String _serializeRadioInfo(int deviceId) {
+    final info = _broker.getValueDynamic(deviceId, 'Info');
+    if (info is RadioDevInfo) {
+      return jsonEncode({
+        'vendor_id': info.vendorId,
+        'product_id': info.productId,
+        'hw_ver': info.hwVer,
+        'soft_ver': info.softVer,
+        'support_radio': info.supportRadio,
+        'support_medium_power': info.supportMediumPower,
+        'region_count': info.regionCount,
+        'channel_count': info.channelCount,
+        'support_vfo': info.supportVfo,
+        'support_dmr': info.supportDmr,
+        'support_noaa': info.supportNoaa,
+        'gmrs': info.gmrs,
+        'freq_range_count': info.freqRangeCount,
+      });
+    }
+    return 'No radio info available';
+  }
+
+  String _serializeRadioSettings(int deviceId) {
+    final settings = _broker.getValueDynamic(deviceId, 'Settings');
+    if (settings is RadioSettings) {
+      return jsonEncode({
+        'squelch_level': settings.squelchLevel,
+        'scan': settings.scan,
+        'channel_a': settings.channelA,
+        'channel_b': settings.channelB,
+        'double_channel': settings.doubleChannel,
+        'mic_gain': settings.micGain,
+        'local_speaker': settings.localSpeaker,
+        'bt_mic_gain': settings.btMicGain,
+        'vfo_x': settings.vfoX,
+      });
+    }
+    return 'No settings available';
+  }
+
+  String _serializeChannels(int deviceId) {
+    final channels = _broker.getValueDynamic(deviceId, 'Channels');
+    if (channels is List) {
+      final list = <Map<String, dynamic>>[];
+      for (int i = 0; i < channels.length; i++) {
+        final ch = channels[i];
+        if (ch is RadioChannelInfo && ch.rxFreq > 0) {
+          list.add({
+            'index': i,
+            'name': ch.nameStr,
+            'rx_freq_mhz': ch.rxFreq / 1000000.0,
+            'tx_freq_mhz': ch.txFreq / 1000000.0,
+            'modulation': ch.rxMod.name,
+            'bandwidth': ch.bandwidth.name,
+            'tx_at_max_power': ch.txAtMaxPower,
+            'tx_sub_audio': ch.txSubAudio,
+            'rx_sub_audio': ch.rxSubAudio,
+            'scan': ch.scan,
+          });
+        }
+      }
+      return jsonEncode(list);
+    }
+    return 'No channel data available';
+  }
+
+  String _serializePosition(int deviceId) {
+    final pos = _broker.getValueDynamic(deviceId, 'Position');
+    if (pos is RadioPosition) {
+      return jsonEncode({
+        'latitude': pos.latitude,
+        'longitude': pos.longitude,
+        'altitude': pos.altitude,
+        'speed': pos.speed,
+        'heading': pos.heading,
+        'locked': pos.locked,
+      });
+    }
+    return 'No GPS position available';
+  }
+
+  String _serializeHtStatus(int deviceId) {
+    final status = _broker.getValueDynamic(deviceId, 'HtStatus');
+    if (status is RadioHtStatus) {
+      return jsonEncode({
+        'rssi': status.rssi,
+        'is_in_tx': status.isInTx,
+        'is_in_rx': status.isInRx,
+        'squelch_open': status.isSq,
+        'current_channel': status.channelId,
+        'channel_name': status.nameStr,
+        'is_scan': status.isScan,
+        'gps_locked': status.isGpsLocked,
+      });
+    }
+    return 'No HT status available';
+  }
+
   // --- Helpers ---
 
   List<int> _getConnectedRadioIds() {
     final radios = _broker.getValueDynamic(1, 'ConnectedRadios');
     if (radios is List) {
       return radios
-          .whereType<Map>()
-          .map((m) => m['deviceId'] as int?)
-          .whereType<int>()
+          .whereType<ht.Radio>()
+          .map((r) => r.deviceId)
           .where((id) => id > 0)
           .toList();
     }

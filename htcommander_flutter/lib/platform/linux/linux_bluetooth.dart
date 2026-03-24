@@ -14,7 +14,7 @@ import 'native_methods.dart';
 ///
 /// Strategy: Use SDP to discover the SPP command channel, then connect with a
 /// native RFCOMM socket and verify GAIA protocol response. Falls back to
-/// probing channels 1-10 if SDP fails.
+/// probing channels 1-30 if SDP fails.
 ///
 /// The blocking connection + read loop runs in a separate Dart Isolate so the
 /// main isolate UI thread is never blocked.
@@ -57,8 +57,15 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
   @override
   void disconnect() {
     _connected = false;
-    _toIsolate?.send({'cmd': 'disconnect'});
-    _cleanup();
+    if (_toIsolate != null) {
+      _toIsolate!.send({'cmd': 'disconnect'});
+      // Give isolate time to close the RFCOMM fd cleanly before killing.
+      // Without this, the fd leaks and the radio's RFCOMM channel stays
+      // occupied, blocking reconnection.
+      Future.delayed(const Duration(seconds: 1), _cleanup);
+    } else {
+      _cleanup();
+    }
   }
 
   @override
@@ -128,6 +135,11 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
     var running = true;
     var rfcommFd = -1;
 
+    // Write queue: filled by receivePort listener, drained by read loop.
+    // This works because the async read loop yields via Future.delayed,
+    // allowing the event loop to process incoming ReceivePort messages.
+    final writeQueue = <Uint8List>[];
+
     // Listen for commands from the main isolate
     receivePort.listen((dynamic message) {
       if (message is! Map<String, dynamic>) return;
@@ -136,7 +148,7 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
         case 'write':
           if (rfcommFd < 0) return;
           final data = message['data'] as Uint8List;
-          _writeAll(rfcommFd, data);
+          writeQueue.add(data);
         case 'disconnect':
           running = false;
       }
@@ -162,9 +174,9 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
           _debug(toMain, 'SDP discovery returned no channels');
         }
 
-        // Step 3: Probe channels 1-10 if SDP failed
+        // Step 3: Probe channels 1-30 if SDP failed
         if (rfcommFd < 0) {
-          _debug(toMain, 'Step 3: Probing RFCOMM channels 1-10...');
+          _debug(toMain, 'Step 3: Probing RFCOMM channels 1-30...');
           rfcommFd = _probeChannels(bdaddr, toMain);
         }
 
@@ -175,7 +187,7 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
 
         _debug(toMain, 'Attempt $attempt failed — no GAIA-responsive channel');
         if (attempt < 3 && running) {
-          await Future<void>.delayed(const Duration(seconds: 2));
+          await Future<void>.delayed(const Duration(seconds: 3));
         }
       } catch (e, st) {
         _debug(toMain, 'Attempt $attempt error: $e\n$st');
@@ -184,7 +196,7 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
           rfcommFd = -1;
         }
         if (attempt < 3 && running) {
-          await Future<void>.delayed(const Duration(seconds: 2));
+          await Future<void>.delayed(const Duration(seconds: 3));
         }
       }
     }
@@ -212,8 +224,8 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
     // Notify main isolate that connection is established
     toMain.send(<String, dynamic>{'event': 'connected'});
 
-    // Read loop
-    _runReadLoop(rfcommFd, toMain, () => running);
+    // Read loop (async — yields to event loop so write queue gets filled)
+    await _runReadLoop(rfcommFd, toMain, writeQueue, () => running);
 
     // Cleanup
     NativeMethods.close(rfcommFd);
@@ -224,50 +236,87 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
     });
   }
 
-  static void _runReadLoop(
+  /// Async read loop that yields to the isolate event loop on idle cycles.
+  ///
+  /// This is critical: Dart isolates are single-threaded. Using synchronous
+  /// `sleep()` would block the event loop, preventing the ReceivePort listener
+  /// from processing write commands. By using `await Future.delayed()` instead,
+  /// we yield to the event loop which processes queued writes between reads.
+  static Future<void> _runReadLoop(
     int fd,
     SendPort toMain,
+    List<Uint8List> writeQueue,
     bool Function() isRunning,
-  ) {
+  ) async {
     final accumulator = Uint8List(4096);
     var accPtr = 0;
     var accLen = 0;
     final readBufSize = 1024;
     final readBuf = calloc<Uint8>(readBufSize);
 
+    // Block SIGPROF/SIGALRM for read/write syscalls — Dart VM's profiler
+    // sends SIGPROF which interrupts RFCOMM syscalls with EINTR.
+    // We block before each syscall batch and unblock before yielding,
+    // so the VM can still profile during the await.
+    final blockSet = calloc<Uint8>(sigsetSize);
+    final oldSet = calloc<Uint8>(sigsetSize);
+    NativeMethods.sigemptyset(blockSet);
+    NativeMethods.sigaddset(blockSet, sigprof);
+    NativeMethods.sigaddset(blockSet, sigalrm);
+
     try {
       while (isRunning()) {
+        // Block signals for the syscall batch
+        NativeMethods.sigprocmask(sigBlock, blockSet, oldSet);
+
+        // Drain write queue — process pending writes from the main isolate
+        while (writeQueue.isNotEmpty) {
+          final data = writeQueue.removeAt(0);
+          _writeAll(fd, data, signalsAlreadyBlocked: true);
+        }
+
         final bytesRead =
             NativeMethods.read(fd, readBuf.cast<Void>(), readBufSize);
 
+        // Capture errno immediately while signals are still blocked
+        final err = bytesRead < 0 ? NativeMethods.errno : 0;
+
+        // Restore signals before any potential yield
+        NativeMethods.sigprocmask(sigBlock, oldSet, nullptr.cast<Uint8>());
+
         if (bytesRead < 0) {
-          final err = NativeMethods.errno;
           if (err == eagain || err == eintr) {
-            // No data available — sleep and retry
-            sleep(const Duration(milliseconds: 50));
+            // No data available — yield to event loop (processes writes)
+            await Future<void>.delayed(const Duration(milliseconds: 50));
             continue;
           }
           // Real error
+          toMain.send(<String, dynamic>{
+            'event': 'log',
+            'msg': 'Read error: errno=$err',
+          });
           break;
         }
 
         if (bytesRead == 0) {
           // Remote closed connection
+          toMain.send(<String, dynamic>{
+            'event': 'log',
+            'msg': 'Remote closed connection (read returned 0)',
+          });
           break;
         }
 
         // Copy native buffer into accumulator
-        final space = accumulator.length - (accPtr + accLen);
+        int space = accumulator.length - (accPtr + accLen);
         if (space <= 0) {
           accPtr = 0;
           accLen = 0;
+          space = accumulator.length;
         }
 
         // Ensure we don't overflow the accumulator
-        final toCopy =
-            bytesRead <= (accumulator.length - (accPtr + accLen))
-                ? bytesRead
-                : (accumulator.length - (accPtr + accLen));
+        final toCopy = bytesRead <= space ? bytesRead : space;
         for (int i = 0; i < toCopy; i++) {
           accumulator[accPtr + accLen + i] = readBuf[i];
         }
@@ -297,6 +346,8 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
         }
       }
     } finally {
+      calloc.free(blockSet);
+      calloc.free(oldSet);
       calloc.free(readBuf);
     }
   }
@@ -310,8 +361,11 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
   static Future<void> _aclConnect(String macColon, SendPort toMain) async {
     try {
       final result = await Process.run('bluetoothctl', ['connect', macColon]);
-      _debug(toMain, 'bluetoothctl connect: exit=${result.exitCode}, stdout=${(result.stdout as String).trim()}');
-      await Future<void>.delayed(const Duration(seconds: 2));
+      final stdout = (result.stdout as String).trim();
+      _debug(toMain, 'bluetoothctl connect: exit=${result.exitCode}, stdout=$stdout');
+      // Wait for ACL link to stabilize — radios need time after reconnect
+      final delay = stdout.contains('already connected') ? 1 : 3;
+      await Future<void>.delayed(Duration(seconds: delay));
     } catch (e) {
       _debug(toMain, 'bluetoothctl failed: $e (non-fatal)');
     }
@@ -385,7 +439,7 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
   }
 
   static int _probeChannels(List<int> bdaddr, SendPort toMain) {
-    for (int ch = 1; ch <= 10; ch++) {
+    for (int ch = 1; ch <= 30; ch++) {
       _debug(toMain, 'Probing channel $ch...');
       final fd = _createRfcommFd(bdaddr, ch, toMain);
       if (fd < 0) continue;
@@ -419,8 +473,8 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
     try {
       return _verifyGaiaResponseInner(fd, channel, toMain);
     } finally {
-      // Restore signals
-      NativeMethods.sigprocmask(sigUnblock, blockSet, nullptr.cast<Uint8>());
+      // Restore original signal mask
+      NativeMethods.sigprocmask(sigBlock, oldSet, nullptr.cast<Uint8>());
       calloc.free(blockSet);
       calloc.free(oldSet);
     }
@@ -525,17 +579,21 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
       NativeMethods.sigaddset(blockSet, sigalrm);
       NativeMethods.sigprocmask(sigBlock, blockSet, oldSet);
 
-      final result = NativeMethods.connect(fd, addr.cast<Void>(), 10);
-
-      // Restore signal mask immediately
-      NativeMethods.sigprocmask(sigUnblock, blockSet, nullptr.cast<Uint8>());
+      int result;
+      int err = 0;
+      try {
+        result = NativeMethods.connect(fd, addr.cast<Void>(), 10);
+        if (result < 0) err = NativeMethods.errno;
+      } finally {
+        // Restore original signal mask
+        NativeMethods.sigprocmask(sigBlock, oldSet, nullptr.cast<Uint8>());
+      }
 
       if (result == 0) {
         _debug(toMain, 'RFCOMM connected: fd=$fd, ch=$channel');
         return fd;
       }
 
-      final err = NativeMethods.errno;
       _debug(toMain, 'connect(ch=$channel) failed: errno=$err');
       NativeMethods.close(fd);
       return -1;
@@ -546,7 +604,21 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
     }
   }
 
-  static void _writeAll(int fd, Uint8List data) {
+  static void _writeAll(int fd, Uint8List data,
+      {bool signalsAlreadyBlocked = false}) {
+    Pointer<Uint8>? blockSet;
+    Pointer<Uint8>? oldSet;
+
+    // Block SIGPROF/SIGALRM around write() unless already blocked by caller
+    if (!signalsAlreadyBlocked) {
+      blockSet = calloc<Uint8>(sigsetSize);
+      oldSet = calloc<Uint8>(sigsetSize);
+      NativeMethods.sigemptyset(blockSet);
+      NativeMethods.sigaddset(blockSet, sigprof);
+      NativeMethods.sigaddset(blockSet, sigalrm);
+      NativeMethods.sigprocmask(sigBlock, blockSet, oldSet);
+    }
+
     final buf = calloc<Uint8>(data.length);
     try {
       for (int i = 0; i < data.length; i++) {
@@ -575,6 +647,11 @@ class LinuxRadioBluetooth extends RadioBluetoothTransport {
       }
     } finally {
       calloc.free(buf);
+      if (!signalsAlreadyBlocked && blockSet != null && oldSet != null) {
+        NativeMethods.sigprocmask(sigBlock, oldSet, nullptr.cast<Uint8>());
+        calloc.free(blockSet);
+        calloc.free(oldSet);
+      }
     }
   }
 

@@ -305,7 +305,14 @@ class Radio {
 
   void _onReceivedData(Exception? error, Uint8List? value) {
     if (_state != RadioState.connected && _state != RadioState.connecting) return;
-    if (error != null) debug('Notification ERROR SET');
+    if (error != null) {
+      debug('Transport error: $error');
+      if (value == null) {
+        // Transport reported an error with no data — connection lost
+        disconnect('Connection lost: $error', RadioState.disconnected);
+        return;
+      }
+    }
     if (value == null) { debug('Notification: NULL'); return; }
     if (value.length < 4) { debug('Notification: too short (${value.length} bytes)'); return; }
 
@@ -413,6 +420,13 @@ class Radio {
         _handleGetHtStatus(value);
         break;
 
+      case _BasicCmd.registerNotification:
+      case _BasicCmd.cancelNotification:
+      case _BasicCmd.setVolume:
+      case _BasicCmd.setRegion:
+        // Acknowledgement — nothing to do
+        break;
+
       default:
         debug('Unexpected Basic Command: $cmd');
     }
@@ -426,6 +440,8 @@ class Radio {
     if (_allChannelsLoaded()) {
       _broker.dispatch(deviceId, 'Channels', channels);
       _broker.dispatch(deviceId, 'AllChannelsLoaded', true);
+      // Re-request battery now that the radio is fully initialized
+      _requestPowerStatus(_PowerStatus.batteryAsPercentage);
     }
   }
 
@@ -511,7 +527,10 @@ class Radio {
   }
 
   void _handleReadStatus(Uint8List value) {
-    if (value.length < 9) { debug('READ_STATUS response too short'); return; }
+    if (value.length < 8) {
+      debug('READ_STATUS response too short (${value.length} bytes)');
+      return;
+    }
     final powerStatus = BinaryUtils.getShort(value, 5);
 
     switch (powerStatus) {
@@ -519,6 +538,7 @@ class Radio {
         _broker.dispatch(deviceId, 'BatteryLevel', value[7]);
         break;
       case _PowerStatus.batteryVoltage:
+        if (value.length < 9) { debug('BATTERY_VOLTAGE response too short'); return; }
         final voltage = BinaryUtils.getShort(value, 7) / 1000.0;
         _broker.dispatch(deviceId, 'BatteryVoltage', voltage);
         break;

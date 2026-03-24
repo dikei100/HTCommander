@@ -309,15 +309,15 @@ flutter build apk
 
 **Startup sequence** (`main.dart`): `WidgetsFlutterBinding.ensureInitialized()` → `SharedPrefsSettingsStore.create()` → `DataBroker.initialize(store)` → `initializeDataHandlers()` (registers 14 handlers) → `runApp()`.
 
-**App shell** (`app.dart`): `AppShell` holds `Radio?` instance and `PlatformServices?`. On connect: creates `Radio(100, mac, platformServices)`, registers via `DataBroker.addDataHandler()`. Subscribes to AllDevices `State`/`Info`/`BatteryAsPercentage` for toolbar status. Platform detection: `Platform.isLinux` → `LinuxPlatformServices`.
+**App shell** (`app.dart`): `AppShell` holds `Radio?` instance and `PlatformServices?`. On connect: creates `Radio(100, mac, platformServices)`, registers via `DataBroker.addDataHandler()`, looks up BT friendly name via `bluetoothctl info`. Subscribes to AllDevices `State`/`Info`/`BatteryAsPercentage`/`FriendlyName` for toolbar status. Platform detection: `Platform.isLinux` → `LinuxPlatformServices`. Connect button uses last saved MAC (no dialog prompt); dialog only shown when no MAC is saved. Screens use `IndexedStack` to preserve state across tab switches. MCP `McpConnectRadio`/`McpDisconnectRadio` events wired for remote connect/disconnect.
 
 **Key directories**:
 - `core/` — DataBroker pub/sub, DataBrokerClient, SharedPreferences SettingsStore
 - `radio/` — GAIA state machine (`radio.dart`), SBC codec (`sbc/`), SSTV codec (`sstv/`), AX.25 (`ax25/`), APRS parser (`aprs/`), software modem, audio resampler, morse/DTMF engines
-- `handlers/` — 14 DataBroker handlers: FrameDeduplicator, PacketStore, AprsHandler, LogStore, MailStore, VoiceHandler, AudioClipHandler, TorrentHandler, BbsHandler, WinlinkClient, YappTransfer, + 4 server stubs
+- `handlers/` — 14 DataBroker handlers: FrameDeduplicator, PacketStore, AprsHandler, LogStore, MailStore, VoiceHandler, AudioClipHandler, TorrentHandler, BbsHandler, WinlinkClient, YappTransfer, + server stubs (Web/Rigctld/AGWPE on mobile)
 - `servers/` — MCP (JSON-RPC 2.0), Web (static + WebSocket audio), Rigctld, AGWPE, SMTP, IMAP
 - `platform/linux/` — dart:ffi RFCOMM Bluetooth (`linux_bluetooth.dart` runs in Isolate), audio I/O (`linux_audio_service.dart` via paplay/parecord subprocesses)
-- `screens/` — 12 screens, all wired to DataBroker with live subscriptions in `initState()`
+- `screens/` — 12 screens, all wired to DataBroker with live subscriptions in `initState()`. Communication screen loads current state on init for IndexedStack rebuilds
 - `widgets/` — VfoDisplay, PttButton, SignalBars, RadioStatusCard, GlassCard, SidebarNav
 - `dialogs/` — Channel editor/picker, quick frequency, QSO add/edit, station add/edit, compose mail
 
@@ -327,7 +327,13 @@ Components communicate via `DataBroker.dispatch(deviceId, name, data)` and `brok
 
 ### Flutter Linux Bluetooth (dart:ffi)
 
-`platform/linux/native_methods.dart` binds libc: `socket()`, `connect()`, `close()`, `read()`, `write()`, `fcntl()`, `poll()` with AF_BLUETOOTH=31, BTPROTO_RFCOMM=3. `linux_bluetooth.dart` runs the RFCOMM connection + read loop in a Dart Isolate (main isolate is single-threaded). Connection flow: `bluetoothctl connect` (ACL) → `sdptool browse` (SDP channel discovery) → RFCOMM socket per channel → GAIA GET_DEV_ID verification → O_NONBLOCK read loop with 50ms sleep (poll broken on RFCOMM). Isolate↔main communication via SendPort with `{'cmd':...}` / `{'event':...}` messages.
+`platform/linux/native_methods.dart` binds libc: `socket()`, `connect()`, `close()`, `read()`, `write()`, `fcntl()`, `poll()`, `sigprocmask()`, `sigemptyset()`, `sigaddset()` with AF_BLUETOOTH=31, BTPROTO_RFCOMM=3. Poll constants: POLLIN=1, POLLOUT=4, POLLERR=8, POLLHUP=16, POLLNVAL=32 (matching Linux `asm-generic/poll.h`). `linux_bluetooth.dart` runs the RFCOMM connection + read loop in a Dart Isolate (main isolate is single-threaded). Connection flow: `bluetoothctl connect` (ACL, 3s stabilization wait) → `sdptool browse` (SDP channel discovery) → RFCOMM socket per channel → GAIA GET_DEV_ID verification → O_NONBLOCK async read loop with `await Future.delayed(50ms)` (poll broken on RFCOMM). Isolate↔main communication via SendPort with `{'cmd':...}` / `{'event':...}` messages.
+
+**Critical Dart isolate pattern**: The read loop MUST be `async` and use `await Future.delayed()` instead of synchronous `sleep()`. Dart isolates are single-threaded — `sleep()` blocks the event loop, preventing the `ReceivePort` listener from delivering write commands. Writes are queued in a `List<Uint8List>` by the ReceivePort listener and drained by the read loop between reads. SIGPROF/SIGALRM are blocked around each read/write syscall batch and restored before yielding.
+
+**Disconnect cleanup**: `disconnect()` sends `{'cmd': 'disconnect'}` then delays 1 second before killing the isolate, allowing clean RFCOMM fd close. Without this delay, the fd leaks and blocks reconnection (all channels return ECONNREFUSED). Channel probing range: 1-30 (matching C#).
+
+**Connection loss detection**: When `Radio._onReceivedData` receives an error with null data (transport died), it calls `disconnect()` to properly transition state. The read loop logs the exit reason (errno or "read returned 0") before exiting.
 
 ### Flutter Audio Pipeline
 

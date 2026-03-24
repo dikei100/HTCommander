@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, Process;
 import 'package:flutter/material.dart';
 
 import 'core/data_broker.dart';
@@ -64,23 +64,32 @@ class _AppShellState extends State<AppShell> {
   bool get _isConnected => _radioState == 'connected';
   bool get _isConnecting => _radioState == 'connecting';
 
-  static final _screens = <Widget>[
-    const CommunicationScreen(),
-    const ContactsScreen(),
-    const LogbookScreen(),
-    const PacketsScreen(),
-    const TerminalScreen(),
-    const BbsScreen(),
-    const MailScreen(),
-    const TorrentScreen(),
-    const AprsScreen(),
-    const MapScreen(),
-    const DebugScreen(),
+  static const _screens = <Widget>[
+    CommunicationScreen(),
+    ContactsScreen(),
+    LogbookScreen(),
+    PacketsScreen(),
+    TerminalScreen(),
+    BbsScreen(),
+    MailScreen(),
+    TorrentScreen(),
+    AprsScreen(),
+    MapScreen(),
+    DebugScreen(),
   ];
 
-  Widget get _currentScreen {
-    if (_showSettings) return const SettingsScreen();
-    return _screens[_selectedIndex];
+  /// Builds the screen area. Uses IndexedStack to keep all screens alive
+  /// so they don't lose DataBroker state when the user switches tabs.
+  Widget _buildScreenArea() {
+    return Stack(
+      children: [
+        IndexedStack(
+          index: _selectedIndex,
+          children: _screens,
+        ),
+        if (_showSettings) const SettingsScreen(),
+      ],
+    );
   }
 
   @override
@@ -100,6 +109,10 @@ class _AppShellState extends State<AppShell> {
     _broker.subscribe(DataBroker.allDevices, 'Info', _onRadioInfoChanged);
     _broker.subscribe(DataBroker.allDevices, 'BatteryAsPercentage', _onBatteryChanged);
     _broker.subscribe(DataBroker.allDevices, 'FriendlyName', _onFriendlyNameChanged);
+
+    // Subscribe to MCP connect/disconnect events
+    _broker.subscribe(1, 'McpConnectRadio', _onMcpConnect);
+    _broker.subscribe(1, 'McpDisconnectRadio', _onMcpDisconnect);
   }
 
   void _initPlatformServices() {
@@ -147,11 +160,29 @@ class _AppShellState extends State<AppShell> {
     if (mounted) setState(() => _radioName = data);
   }
 
+  // ── MCP remote connect/disconnect ──────────────────────────────
+
+  void _onMcpConnect(int deviceId, String name, Object? data) {
+    if (_isConnected || _isConnecting) return;
+    final mac = (data is String && data.isNotEmpty)
+        ? data
+        : DataBroker.getValue<String>(0, 'LastRadioMac', '');
+    if (mac.isNotEmpty) _connectToRadio(mac);
+  }
+
+  void _onMcpDisconnect(int deviceId, String name, Object? data) {
+    if (!_isConnected && !_isConnecting) return;
+    _disconnectRadio();
+  }
+
   // ── Radio connection ───────────────────────────────────────────────
 
   void _onConnectTap() {
     if (_isConnected || _isConnecting) {
       _disconnectRadio();
+    } else if (_radioMac.isNotEmpty) {
+      // Connect directly using the last known MAC
+      _connectToRadio(_radioMac);
     } else {
       _showConnectDialog();
     }
@@ -184,10 +215,34 @@ class _AppShellState extends State<AppShell> {
     _radio = ht.Radio(_radioDeviceId, mac, _platformServices);
     DataBroker.addDataHandler('Radio_$_radioDeviceId', _radio!);
 
+    // Look up the Bluetooth friendly name asynchronously
+    _lookupBluetoothName(mac);
+
     // Dispatch connected radios list
     DataBroker.dispatch(1, 'ConnectedRadios', [_radio!]);
 
     _radio!.connect();
+  }
+
+  Future<void> _lookupBluetoothName(String mac) async {
+    // Format MAC with colons for bluetoothctl
+    final clean = mac.replaceAll(':', '').replaceAll('-', '').toUpperCase();
+    final macColon = List.generate(6, (i) => clean.substring(i * 2, i * 2 + 2)).join(':');
+    try {
+      final result = await Process.run('bluetoothctl', ['info', macColon]);
+      if (result.exitCode == 0) {
+        final output = result.stdout as String;
+        final nameMatch = RegExp(r'Name:\s*(.+)').firstMatch(output);
+        if (nameMatch != null) {
+          final name = nameMatch.group(1)!.trim();
+          if (name.isNotEmpty) {
+            _radio?.updateFriendlyName(name);
+          }
+        }
+      }
+    } catch (_) {
+      // Non-fatal — radio will just show without a friendly name
+    }
   }
 
   void _disconnectRadio() {
@@ -316,7 +371,7 @@ class _AppShellState extends State<AppShell> {
                     onAboutTap: () => _showAboutDialog(context),
                   ),
                   const VerticalDivider(width: 1, thickness: 1),
-                  Expanded(child: _currentScreen),
+                  Expanded(child: _buildScreenArea()),
                 ],
               ),
             ),
@@ -329,7 +384,7 @@ class _AppShellState extends State<AppShell> {
       body: Column(
         children: [
           _buildToolbar(colors),
-          Expanded(child: _currentScreen),
+          Expanded(child: _buildScreenArea()),
         ],
       ),
       bottomNavigationBar: NavigationBar(
