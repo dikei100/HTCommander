@@ -1,13 +1,20 @@
-import 'dart:io' show Platform;
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../core/data_broker.dart';
 import '../core/data_broker_client.dart';
-import '../platform/linux/linux_audio_service.dart';
+import '../dialogs/sstv_send_dialog.dart';
+import '../platform/audio_service.dart';
+import '../platform/bluetooth_service.dart' show PlatformServices;
 import '../radio/models/radio_dev_info.dart';
 import '../radio/models/radio_ht_status.dart';
 import '../radio/models/radio_settings.dart';
 import '../radio/models/radio_channel_info.dart';
 import '../radio/models/radio_position.dart';
+import '../radio/sstv/sstv_encoder.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/vfo_display.dart';
 import '../widgets/signal_bars.dart';
@@ -43,15 +50,24 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
   double _vfoBFreq = 0;
   String _vfoAName = '';
   String _vfoBName = '';
-  final List<String> _messages = [];
+  final List<_ChatMessage> _messages = [];
+  final ScrollController _scrollController = ScrollController();
+
+  // SSTV decode state
+  bool _sstvDecoding = false;
+  String _sstvModeName = '';
+  double _sstvProgress = 0;
+
+  // Recording state
+  bool _isRecording = false;
 
   // Cached radio data for deriving VFO info
   RadioSettings? _settings;
   List<RadioChannelInfo?> _channels = [];
 
   // Audio I/O
-  LinuxMicCapture? _micCapture;
-  LinuxAudioOutput? _audioOutput;
+  MicCapture? _micCapture;
+  AudioOutput? _audioOutput;
   bool _audioEnabled = false;
 
   @override
@@ -69,6 +85,10 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
     _broker.subscribe(100, 'BatteryAsPercentage', _onBattery);
     _broker.subscribe(100, 'Position', _onPosition);
     _broker.subscribe(100, 'AudioState', _onAudioState);
+    _broker.subscribe(1, 'SstvDecodingStarted', _onSstvDecodingStarted);
+    _broker.subscribe(1, 'SstvDecodingProgress', _onSstvDecodingProgress);
+    _broker.subscribe(1, 'SstvDecodingComplete', _onSstvDecodingComplete);
+    _broker.subscribe(1, 'DecodedText', _onDecodedText);
   }
 
   void _loadCurrentState() {
@@ -111,6 +131,7 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
     _audioOutput?.stop();
     _broker.dispose();
     _inputController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -131,8 +152,8 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
   void _onAudioState(int deviceId, String name, Object? data) {
     if (!mounted || data is! bool) return;
     setState(() => _audioEnabled = data);
-    if (data && _audioOutput == null && Platform.isLinux) {
-      _audioOutput = LinuxAudioOutput();
+    if (data && _audioOutput == null && PlatformServices.instance != null) {
+      _audioOutput = PlatformServices.instance!.createAudioOutput();
       _audioOutput!.start(100);
     } else if (!data) {
       _audioOutput?.stop();
@@ -211,6 +232,123 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
     }
   }
 
+  // ── SSTV decode callbacks ─────────────────────────────────────────
+
+  void _onSstvDecodingStarted(int deviceId, String name, Object? data) {
+    if (!mounted) return;
+    final modeName = (data is Map ? data['modeName'] : null) as String? ?? '';
+    setState(() {
+      _sstvDecoding = true;
+      _sstvModeName = modeName;
+      _sstvProgress = 0;
+    });
+  }
+
+  void _onSstvDecodingProgress(int deviceId, String name, Object? data) {
+    if (!mounted) return;
+    final progress = (data is Map ? data['progress'] : null);
+    if (progress is double) {
+      setState(() => _sstvProgress = progress.clamp(0.0, 1.0));
+    } else if (progress is int) {
+      setState(() => _sstvProgress = (progress / 100.0).clamp(0.0, 1.0));
+    }
+  }
+
+  void _onSstvDecodingComplete(int deviceId, String name, Object? data) {
+    if (!mounted) return;
+    setState(() {
+      _sstvDecoding = false;
+      _sstvProgress = 1.0;
+    });
+  }
+
+  void _onDecodedText(int deviceId, String name, Object? data) {
+    if (!mounted || data is! String || data.isEmpty) return;
+    setState(() {
+      _messages.add(_ChatMessage(text: data, outgoing: false));
+    });
+    _scrollToBottom();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  // ── SSTV send ───────────────────────────────────────────────────
+
+  Future<void> _sendSstv() async {
+    final result = await showDialog<SstvSendResult>(
+      context: context,
+      builder: (_) => const SstvSendDialog(),
+    );
+    if (result == null || !mounted) return;
+
+    // Load image pixels.
+    final file = File(result.imagePath);
+    if (!await file.exists()) return;
+    final imageBytes = await file.readAsBytes();
+    final codec = await ui.instantiateImageCodec(imageBytes);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+    final byteData =
+        await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (byteData == null) return;
+
+    // Convert RGBA → ARGB Int32List expected by SstvEncoder.
+    final rgbaBytes = byteData.buffer.asUint8List();
+    final pixelCount = image.width * image.height;
+    final pixels = Int32List(pixelCount);
+    for (int i = 0; i < pixelCount; i++) {
+      final r = rgbaBytes[i * 4];
+      final g = rgbaBytes[i * 4 + 1];
+      final b = rgbaBytes[i * 4 + 2];
+      final a = rgbaBytes[i * 4 + 3];
+      pixels[i] = (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    // Encode to float PCM.
+    final encoder = SstvEncoder(32000);
+    final floatSamples =
+        encoder.encode(pixels, image.width, image.height, result.modeName);
+
+    // Convert float (-1..1) → 16-bit signed → bytes, chunk and transmit.
+    const chunkSamples = 3200; // 100ms at 32kHz
+    for (int offset = 0; offset < floatSamples.length; offset += chunkSamples) {
+      final end = (offset + chunkSamples).clamp(0, floatSamples.length);
+      final chunk = Uint8List((end - offset) * 2);
+      final bd = ByteData.sublistView(chunk);
+      for (int i = 0; i < end - offset; i++) {
+        int s = (floatSamples[offset + i] * 32767).round().clamp(-32768, 32767);
+        bd.setInt16(i * 2, s, Endian.little);
+      }
+      DataBroker.dispatch(100, 'TransmitVoicePCM', chunk, store: false);
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
+    if (mounted) {
+      setState(() {
+        _messages.add(_ChatMessage(
+            text: 'Sent SSTV image (${result.modeName})', outgoing: true));
+      });
+      _scrollToBottom();
+    }
+  }
+
+  // ── Recording toggle ────────────────────────────────────────────
+
+  void _toggleRecording() {
+    setState(() => _isRecording = !_isRecording);
+    _broker.dispatch(1, 'SetRecordingEnabled', _isRecording, store: false);
+  }
+
   // ── PTT ────────────────────────────────────────────────────────────
 
   void _onPttStart() {
@@ -218,8 +356,8 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
     if (!_audioEnabled) {
       DataBroker.dispatch(100, 'SetAudio', true, store: false);
     }
-    if (Platform.isLinux) {
-      _micCapture ??= LinuxMicCapture();
+    if (PlatformServices.instance != null) {
+      _micCapture ??= PlatformServices.instance!.createMicCapture();
       _micCapture!.start(100);
     }
   }
@@ -421,7 +559,7 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
           const Spacer(),
           _QuickButton(
             label: 'Send SSTV',
-            onPressed: _isConnected ? () {} : null,
+            onPressed: _isConnected ? _sendSstv : null,
           ),
           const SizedBox(width: 6),
           _QuickButton(
@@ -469,35 +607,82 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          // SSTV / Data Link placeholder
+          // SSTV / Data Link panel
           Container(
             height: 200,
             decoration: BoxDecoration(
               color: colors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(6),
             ),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.satellite_alt, size: 32, color: colors.outline),
-                  const SizedBox(height: 8),
-                  Text(
-                    'SSTV / DATA LINK',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: colors.onSurfaceVariant,
+            child: _sstvDecoding || _sstvProgress >= 1.0
+                ? Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _sstvDecoding ? Icons.sync : Icons.check_circle,
+                          size: 28,
+                          color: _sstvDecoding
+                              ? colors.primary
+                              : colors.tertiary,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _sstvDecoding
+                              ? 'DECODING $_sstvModeName'
+                              : 'SSTV COMPLETE',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: colors.onSurface,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        LinearProgressIndicator(
+                          value: _sstvProgress,
+                          backgroundColor:
+                              colors.outlineVariant.withAlpha(38),
+                          color: colors.primary,
+                          minHeight: 4,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${(_sstvProgress * 100).toStringAsFixed(0)}%',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.satellite_alt,
+                            size: 32, color: colors.outline),
+                        const SizedBox(height: 8),
+                        Text(
+                          'SSTV / DATA LINK',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Waiting for incoming data...',
+                          style: TextStyle(
+                              fontSize: 11, color: colors.outline),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Waiting for incoming data...',
-                    style: TextStyle(fontSize: 11, color: colors.outline),
-                  ),
-                ],
-              ),
-            ),
           ),
           const SizedBox(height: 12),
           // Status / Protocol row
@@ -579,28 +764,78 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.chat_bubble_outline, size: 28, color: colors.outline),
+                        Icon(Icons.chat_bubble_outline,
+                            size: 28, color: colors.outline),
                         const SizedBox(height: 8),
                         Text(
                           'No messages yet',
-                          style: TextStyle(fontSize: 11, color: colors.outline),
+                          style:
+                              TextStyle(fontSize: 11, color: colors.outline),
                         ),
                       ],
                     ),
                   )
                 : ListView.separated(
+                    controller: _scrollController,
                     itemCount: _messages.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 6),
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: 6),
                     itemBuilder: (context, index) {
-                      return Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: colors.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          _messages[index],
-                          style: TextStyle(fontSize: 12, color: colors.onSurface),
+                      final msg = _messages[index];
+                      return Align(
+                        alignment: msg.outgoing
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: GestureDetector(
+                          onLongPress: () {
+                            Clipboard.setData(
+                                ClipboardData(text: msg.text));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Copied to clipboard'),
+                                duration: Duration(seconds: 1),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            constraints: BoxConstraints(
+                                maxWidth:
+                                    MediaQuery.of(context).size.width *
+                                        0.65),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: msg.outgoing
+                                  ? colors.primary.withAlpha(30)
+                                  : colors.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: msg.outgoing
+                                    ? colors.primary.withAlpha(50)
+                                    : colors.outlineVariant
+                                        .withAlpha(38),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  msg.text,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: colors.onSurface),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _formatTime(msg.time),
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      color: colors.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                       );
                     },
@@ -666,15 +901,18 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
           ),
           const SizedBox(width: 4),
           OutlinedButton(
-            onPressed: _isConnected ? () {} : null,
+            onPressed: _isConnected ? _toggleRecording : null,
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(4),
               ),
+              backgroundColor: _isRecording
+                  ? Theme.of(context).colorScheme.errorContainer
+                  : null,
               textStyle: const TextStyle(fontSize: 12),
             ),
-            child: const Text('Record'),
+            child: Text(_isRecording ? 'Stop' : 'Record'),
           ),
         ],
       ),
@@ -686,10 +924,25 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
     if (text.isEmpty) return;
     _broker.dispatch(1, 'Chat', text, store: false);
     setState(() {
-      _messages.add(text);
+      _messages.add(_ChatMessage(text: text, outgoing: true));
       _inputController.clear();
     });
+    _scrollToBottom();
   }
+
+  String _formatTime(DateTime t) =>
+      '${t.hour.toString().padLeft(2, '0')}:'
+      '${t.minute.toString().padLeft(2, '0')}:'
+      '${t.second.toString().padLeft(2, '0')}';
+}
+
+/// A chat message with direction and timestamp.
+class _ChatMessage {
+  final String text;
+  final bool outgoing;
+  final DateTime time;
+  _ChatMessage({required this.text, required this.outgoing})
+      : time = DateTime.now();
 }
 
 class _QuickButton extends StatelessWidget {

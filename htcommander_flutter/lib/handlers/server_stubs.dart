@@ -95,3 +95,27 @@ class AgwpeServerStub {
     _broker.dispose();
   }
 }
+
+/// Stub for the CAT serial server (desktop-only feature).
+///
+/// Subscribes to CatServerEnabled and logs start/stop.
+class CatSerialServerStub {
+  final DataBrokerClient _broker = DataBrokerClient();
+
+  CatSerialServerStub() {
+    _broker.subscribe(0, 'CatServerEnabled', _onEnabledChanged);
+  }
+
+  void _onEnabledChanged(int deviceId, String name, Object? data) {
+    final enabled = data is int && data == 1;
+    if (enabled) {
+      _broker.logInfo('CatSerialServer: start requested (stub — not available on mobile)');
+    } else {
+      _broker.logInfo('CatSerialServer: stop requested (stub)');
+    }
+  }
+
+  void dispose() {
+    _broker.dispose();
+  }
+}

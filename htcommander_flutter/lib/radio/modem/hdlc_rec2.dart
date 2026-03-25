@@ -204,6 +204,14 @@ class HdlcRec2 {
     this.passAll = false,
   });
 
+  /// Handle DCD (Data Carrier Detect) state change.
+  ///
+  /// Currently a no-op — DCD state is tracked within the demodulator.
+  /// Provided so that [DemodAfsk] can call it without special-casing.
+  void dcdChange(int chan, int subchan, int slice, bool dcdOn) {
+    // No-op: HdlcRec2 does not use DCD for frame assembly.
+  }
+
   /// Process a single received bit.
   void recBit(int chan, int subchan, int slice, int raw,
       {bool isScrambled = false}) {

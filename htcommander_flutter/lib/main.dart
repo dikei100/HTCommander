@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'app.dart';
@@ -14,6 +16,17 @@ Future<void> main() async {
 
   // Register all data handlers
   initializeDataHandlers();
+
+  // Initialize handler file persistence paths
+  final String appDataPath;
+  if (Platform.isWindows) {
+    final appData = Platform.environment['APPDATA'] ?? '.';
+    appDataPath = '$appData\\HTCommander';
+  } else {
+    final home = Platform.environment['HOME'] ?? '.';
+    appDataPath = '$home/.local/share/HTCommander';
+  }
+  initializeHandlerPaths(appDataPath);
 
   // Log startup
   DataBroker.dispatch(1, 'LogInfo', 'HTCommander-X Flutter started', store: false);

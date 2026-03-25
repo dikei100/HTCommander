@@ -55,7 +55,7 @@ All servers default to loopback. MCP requires Bearer token when `ServerBindAll` 
 
 ## HTCommander-X Flutter Rewrite (`htcommander_flutter/`)
 
-Full Dart/Flutter rewrite targeting Linux desktop, Windows, and Android. Uses "Signal Protocol" design system (dark base `#0c0e17`, cyan primary `#3cd7ff`, glassmorphism, Inter font). Stitch project "HTCommander-X: New UI" is the design reference. ~150 source files, ~40K LOC, 180 tests.
+Full Dart/Flutter rewrite targeting Linux desktop, Windows, and Android. Uses "Signal Protocol" design system (dark base `#0c0e17`, cyan primary `#3cd7ff`, glassmorphism, Inter font). Stitch project "HTCommander-X: New UI" is the design reference. ~183 source files, ~49K LOC, 199 tests.
 
 ### Prerequisites
 
@@ -67,7 +67,7 @@ Full Dart/Flutter rewrite targeting Linux desktop, Windows, and Android. Uses "S
 cd htcommander_flutter
 ~/flutter/bin/flutter pub get
 ~/flutter/bin/flutter analyze        # must pass with zero errors (warnings OK for unused protocol fields)
-~/flutter/bin/flutter test           # 180 tests
+~/flutter/bin/flutter test           # 199 tests
 ~/flutter/bin/flutter test test/handlers/  # run a specific test directory
 ~/flutter/bin/flutter test test/radio/gps_test.dart  # run a single test file
 ~/flutter/bin/flutter analyze lib/handlers/aprs_handler.dart  # analyze a single file
@@ -80,7 +80,7 @@ Note: Flutter SDK is at `~/flutter/bin/flutter` (not on PATH by default).
 
 ### Architecture
 
-**Startup**: `WidgetsFlutterBinding.ensureInitialized()` → `SharedPrefsSettingsStore.create()` → `DataBroker.initialize(store)` → `initializeDataHandlers()` → `runApp()`.
+**Startup**: `WidgetsFlutterBinding.ensureInitialized()` → `SharedPrefsSettingsStore.create()` → `DataBroker.initialize(store)` → `initializeDataHandlers()` → `initializeHandlerPaths(appDataPath)` → `runApp()`.
 
 **App shell** (`app.dart`): Holds `Radio?` and `PlatformServices?`. No top toolbar — sidebar contains branding, frequency display, callsign, and connect/disconnect. Screens in `IndexedStack` (preserves state across tab switches). Sidebar has 8 nav items (Communication, Contacts, Packets, Terminal, BBS, Mail, Torrent, APRS); Logbook/Map/Debug remain in IndexedStack but not in sidebar nav. `_sidebarToScreen` maps sidebar indices to screen indices. MCP `McpConnectRadio`/`McpDisconnectRadio` events wired for remote control.
 
@@ -92,11 +92,13 @@ Note: Flutter SDK is at `~/flutter/bin/flutter` (not on PATH by default).
 - `radio/ax25/` — AX.25 packet/address/session
 - `radio/aprs/` — APRS packet parser, position, message, weather
 - `radio/gps/` — NMEA 0183 parser (GGA, RMC, GSA, GSV, VTG, GLL, ZDA), GPS data model
-- `handlers/` — 18 DataBroker handlers (FrameDeduplicator, PacketStore, AprsHandler, LogStore, MailStore, VoiceHandler, AudioClipHandler, TorrentHandler, BbsHandler, WinlinkClient, YappTransfer, RepeaterBookClient, ImportUtils, AdifExport, GpsSerialHandler, AirplaneHandler, server stubs on mobile)
+- `handlers/` — 20+ DataBroker handlers (FrameDeduplicator, PacketStore, AprsHandler, LogStore, LogFileHandler, MailStore, VoiceHandler, AudioClipHandler, TorrentHandler, BbsHandler, WinlinkClient, WinlinkGatewayRelay, YappTransfer, RepeaterBookClient, ImportUtils, AdifExport, GpsSerialHandler, AirplaneHandler, VirtualAudioBridge, FileDownloader, server stubs on mobile). `winlink_utils.dart` has LZHUF compression, CRC16, checksum, and auth security for B2F protocol.
 - `handlers/adventurer/` — Text adventure game (Easter egg)
-- `dialogs/` — 31 dialog widgets (APRS, radio config, channel editor, SSTV send, spectrogram, RepeaterBook, mail, etc.)
-- `servers/` — MCP (real on desktop, 16 tools), Web, Rigctld, AGWPE, SMTP, IMAP, CAT Serial (TS-2000)
-- `platform/linux/` — dart:ffi RFCOMM Bluetooth (Isolate), audio I/O (paplay/parecord)
+- `dialogs/` — 42 dialog widgets (APRS, radio config, channel editor, SSTV send, spectrogram, RepeaterBook, mail, beacon/ident settings, station selector, etc.)
+- `servers/` — MCP (39 tools on desktop), Web (HTTP/HTTPS + WebSocket audio), Rigctld, AGWPE, SMTP, IMAP, CAT Serial (TS-2000), TLS Certificate Manager. All real on desktop, stubs on mobile.
+- `platform/` — Abstract interfaces: `PlatformServices` (factory, `bluetooth_service.dart`), `AudioOutput`/`MicCapture` (`audio_service.dart`), `SpeechService`, `WhisperEngine`. `PlatformServices.instance` static provides global access.
+- `platform/linux/` — dart:ffi RFCOMM Bluetooth (Isolate), audio I/O (paplay/parecord), LinuxSpeechService (espeak-ng), LinuxWhisperEngine (whisper-cli subprocess), LinuxVirtualAudioProvider (PulseAudio virtual devices)
+- `platform/windows/` — dart:ffi Winsock2 RFCOMM Bluetooth (Isolate), waveOut/waveIn audio, PowerShell TTS (System.Speech), whisper-cli STT
 - `screens/` — 12 screens wired to DataBroker. Communication screen loads current state on init. Screens use 42px inline header bars (not 46px).
 - `widgets/` — VfoDisplay, PttButton, SignalBars, RadioStatusCard, GlassCard, SidebarNav, StatusStrip
 
@@ -116,11 +118,15 @@ Connection flow: `bluetoothctl connect` (ACL, 3s wait) → `sdptool browse` (SDP
 
 **Connection loss**: When `Radio._onReceivedData` gets error+null, calls `disconnect()` to transition state. Read loop logs exit reason before exiting.
 
+### Windows Bluetooth (dart:ffi)
+
+`windows_native_methods.dart` binds ws2_32.dll (Winsock2 RFCOMM) and winmm.dll (waveOut/waveIn). Same Isolate pattern as Linux but using `socket(AF_BTH=32, SOCK_STREAM, BTHPROTO_RFCOMM=3)`, `ioctlsocket(FIONBIO)` for non-blocking, `WSAPoll` for readability, `send()`/`recv()`. No SIGPROF blocking needed. No `bluetoothctl` ACL step (Windows handles automatically). Error code `WSAEWOULDBLOCK=10035` instead of `EAGAIN`. Device scanning via PowerShell `Get-PnpDevice -Class Bluetooth`.
+
 ### Audio Pipeline (Fully Wired)
 
 **RX**: BT audio RFCOMM → 0x7E deframe → SBC decode → PCM → `LinuxAudioOutput` → `paplay` (mono→stereo). **TX**: PTT press → `LinuxMicCapture` → `parecord` (48kHz) → resample to 32kHz → `TransmitVoicePCM` event → `RadioAudioManager` → SBC encode → 0x7E frame → BT audio RFCOMM. PTT release → `CancelVoiceTransmit` event → end frame sent.
 
-**Lifecycle**: `Radio` creates `RadioAudioManager` in constructor, subscribes to `SetAudio` event. Audio auto-starts 3s after radio connects via `_setAudioEnabled(true)`. `LinuxMicCapture`/`LinuxAudioOutput` are instantiated by `CommunicationScreen` on PTT press / `AudioState(true)` respectively.
+**Lifecycle**: `Radio` creates `RadioAudioManager` in constructor, subscribes to `SetAudio` event. Audio auto-starts 3s after radio connects via `_setAudioEnabled(true)`. `AudioOutput`/`MicCapture` created via `PlatformServices.instance` factory by `CommunicationScreen` on `AudioState(true)` / PTT press respectively. Linux uses paplay/parecord subprocesses; Windows uses waveOut/waveIn via dart:ffi.
 
 ### Dialog Pattern
 
@@ -133,7 +139,9 @@ Dialogs in `lib/dialogs/` follow Signal Protocol design system. Key conventions:
 
 ### Handler Initialization
 
-Some handlers require `initialize(appDataPath)` after construction for file persistence (PacketStore, VoiceHandler, BbsHandler, TorrentHandler, WinlinkClient). Called from `initializeDataHandlers()` in `main.dart` after app data directory is resolved.
+`app_init.dart` has two phases: `initializeDataHandlers()` registers all handlers/servers with DataBroker (desktop gets real servers, mobile gets stubs), then `initializeHandlerPaths(appDataPath)` calls `initialize()` on handlers needing file persistence (PacketStore, VoiceHandler, BbsHandler, TorrentHandler, WinlinkClient, LogFileHandler). App data path: Linux `~/.local/share/HTCommander`, Windows `%APPDATA%\HTCommander`.
+
+Platform-specific services injected in `app_init.dart`: Linux gets `LinuxSpeechService` + `LinuxWhisperEngine`, Windows gets `WindowsSpeechService` + `WindowsWhisperEngine`. Platform selection in `app.dart` `_initPlatformServices()` sets `PlatformServices.instance`. Whisper STT requires `whisper-cli` (Linux) or `whisper-cli.exe` (Windows) on PATH and `ggml-{model}.bin` in app data dir.
 
 ### Conventions
 

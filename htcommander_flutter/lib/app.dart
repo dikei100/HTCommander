@@ -9,6 +9,7 @@ import 'radio/models/radio_settings.dart';
 import 'radio/models/radio_channel_info.dart';
 import 'platform/bluetooth_service.dart';
 import 'platform/linux/linux_platform_services.dart';
+import 'platform/windows/windows_platform_services.dart';
 import 'theme/signal_protocol_theme.dart';
 import 'widgets/sidebar_nav.dart';
 import 'screens/communication_screen.dart';
@@ -133,7 +134,10 @@ class _AppShellState extends State<AppShell> {
   void _initPlatformServices() {
     if (Platform.isLinux) {
       _platformServices = LinuxPlatformServices();
+    } else if (Platform.isWindows) {
+      _platformServices = WindowsPlatformServices();
     }
+    PlatformServices.instance = _platformServices;
   }
 
   @override

@@ -4,6 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 http://www.apache.org/licenses/LICENSE-2.0
 */
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -12,6 +13,7 @@ import 'dart:typed_data';
 import '../core/data_broker.dart';
 import '../core/data_broker_client.dart';
 import '../handlers/log_store.dart';
+import '../radio/dtmf_engine.dart';
 import '../radio/radio.dart' as ht;
 import '../radio/models/radio_dev_info.dart';
 import '../radio/models/radio_channel_info.dart';
@@ -31,6 +33,14 @@ class McpServer {
   int _port = 5678;
   bool _running = false;
   String _apiToken = '';
+  bool _mcpPttActive = false;
+  Timer? _mcpPttSilenceTimer;
+  Timer? _mcpPttTimeoutTimer;
+  int _mcpPttDeviceId = -1;
+
+  static const List<String> _debugBlacklist = [
+    'McpApiToken', 'McpDebugToolsEnabled', 'TlsEnabled', 'ServerBindAll', 'WinlinkPassword',
+  ];
 
   McpServer() {
     // Ensure API token exists
@@ -408,6 +418,112 @@ class McpServer {
         },
         required: ['name', 'value']));
 
+    // Radio control tools
+    tools.add(_toolDef('set_vfo_frequency', 'Set VFO to a specific frequency by writing a scratch channel.',
+        props: {
+          'device_id': deviceIdProp,
+          'frequency_mhz': prop('number', 'Frequency in MHz'),
+          'vfo': prop('string', 'Which VFO', enumValues: ['A', 'B']),
+          'modulation': prop('string', 'Modulation type', enumValues: ['FM', 'AM', 'DMR']),
+          'bandwidth': prop('string', 'Channel bandwidth', enumValues: ['narrow', 'wide']),
+          'power': prop('integer', 'TX power level', minimum: 0, maximum: 2),
+        },
+        required: ['device_id', 'frequency_mhz']));
+    tools.add(_toolDef('set_ptt', 'Key or unkey the radio PTT (push-to-talk). Auto-releases after 30 seconds.',
+        props: {
+          'device_id': deviceIdProp,
+          'enabled': prop('boolean', 'true to key PTT, false to release'),
+        },
+        required: ['device_id', 'enabled']));
+    tools.add(_toolDef('set_dual_watch', 'Enable or disable dual watch on a radio.',
+        props: {'device_id': deviceIdProp, 'enabled': prop('boolean', 'Enable dual watch')},
+        required: ['device_id', 'enabled']));
+    tools.add(_toolDef('set_scan', 'Start or stop channel scanning on a radio.',
+        props: {'device_id': deviceIdProp, 'enabled': prop('boolean', 'Enable scanning')},
+        required: ['device_id', 'enabled']));
+    tools.add(_toolDef('set_output_volume', 'Set the audio output volume (0-100).',
+        props: {'device_id': deviceIdProp, 'level': prop('integer', 'Volume 0-100', minimum: 0, maximum: 100)},
+        required: ['device_id', 'level']));
+    tools.add(_toolDef('set_mute', 'Mute or unmute radio audio output.',
+        props: {'device_id': deviceIdProp, 'enabled': prop('boolean', 'Mute audio')},
+        required: ['device_id', 'enabled']));
+    tools.add(_toolDef('set_audio', 'Enable or disable Bluetooth audio on a radio.',
+        props: {'device_id': deviceIdProp, 'enabled': prop('boolean', 'Enable audio')},
+        required: ['device_id', 'enabled']));
+    tools.add(_toolDef('set_gps', 'Enable or disable GPS on a radio.',
+        props: {'device_id': deviceIdProp, 'enabled': prop('boolean', 'Enable GPS')},
+        required: ['device_id', 'enabled']));
+
+    // Transmission tools
+    tools.add(_toolDef('send_chat_message', 'Send a text chat message via radio.',
+        props: {'message': prop('string', 'Message text (max 4096 chars)')},
+        required: ['message']));
+    tools.add(_toolDef('send_morse', 'Transmit text as Morse code.',
+        props: {'text': prop('string', 'Text to send as Morse')},
+        required: ['text']));
+    tools.add(_toolDef('send_dtmf', 'Send DTMF tones via radio.',
+        props: {'device_id': deviceIdProp, 'digits': prop('string', 'DTMF digits (0-9, A-D, *, #)')},
+        required: ['device_id', 'digits']));
+
+    // Audio clip tools
+    tools.add(_toolDef('list_audio_clips', 'List all recorded audio clips.'));
+    tools.add(_toolDef('play_audio_clip', 'Play a recorded audio clip.',
+        props: {'device_id': deviceIdProp, 'clip_name': prop('string', 'Name of the clip to play')},
+        required: ['device_id', 'clip_name']));
+    tools.add(_toolDef('stop_audio_clip', 'Stop audio clip playback.',
+        props: {'device_id': deviceIdProp},
+        required: ['device_id']));
+    tools.add(_toolDef('delete_audio_clip', 'Delete a recorded audio clip.',
+        props: {'clip_name': prop('string', 'Name of the clip to delete')},
+        required: ['clip_name']));
+    tools.add(_toolDef('enable_recording', 'Start recording radio audio.',
+        props: {'device_id': deviceIdProp},
+        required: ['device_id']));
+    tools.add(_toolDef('disable_recording', 'Stop recording radio audio.',
+        props: {'device_id': deviceIdProp},
+        required: ['device_id']));
+
+    // Channel management tools
+    tools.add(_toolDef('write_channel', 'Write a channel configuration to the radio.',
+        props: {
+          'device_id': deviceIdProp,
+          'channel_index': prop('integer', 'Channel index (0-based)', minimum: 0),
+          'rx_frequency_mhz': prop('number', 'Receive frequency in MHz'),
+          'tx_frequency_mhz': prop('number', 'Transmit frequency in MHz'),
+          'name': prop('string', 'Channel name (max 10 chars)'),
+          'modulation': prop('string', 'Modulation', enumValues: ['FM', 'AM', 'DMR']),
+          'bandwidth': prop('string', 'Bandwidth', enumValues: ['narrow', 'wide']),
+          'power': prop('integer', 'TX power', minimum: 0, maximum: 2),
+          'tx_tone_hz': prop('number', 'CTCSS/DCS TX tone in Hz (0 for none)'),
+          'rx_tone_hz': prop('number', 'CTCSS/DCS RX tone in Hz (0 for none)'),
+        },
+        required: ['device_id', 'channel_index', 'rx_frequency_mhz']));
+    tools.add(_toolDef('set_software_modem', 'Set the software packet modem mode.',
+        props: {
+          'mode': prop('string', 'Modem mode', enumValues: ['None', 'AFSK1200', 'PSK2400', 'PSK4800', 'G3RUH9600']),
+        },
+        required: ['mode']));
+
+    // Debug tools (conditional)
+    if (DataBroker.getValue<int>(0, 'McpDebugToolsEnabled', 0) == 1) {
+      tools.add(_toolDef('get_databroker_state', 'Get all DataBroker values for a device (debug).',
+          props: {'device_id': prop('integer', 'Device ID to inspect')},
+          required: ['device_id']));
+      tools.add(_toolDef('get_app_setting', 'Read any application setting by name (debug).',
+          props: {'name': prop('string', 'Setting name')},
+          required: ['name']));
+      tools.add(_toolDef('set_app_setting', 'Write any application setting (debug).',
+          props: {'name': prop('string', 'Setting name'), 'value': prop('string', 'Setting value')},
+          required: ['name', 'value']));
+      tools.add(_toolDef('dispatch_event', 'Dispatch a raw DataBroker event (debug).',
+          props: {
+            'device_id': prop('integer', 'Target device ID'),
+            'name': prop('string', 'Event name'),
+            'value': prop('string', 'Event value'),
+          },
+          required: ['device_id', 'name']));
+    }
+
     return tools;
   }
 
@@ -494,6 +610,91 @@ class McpServer {
             _broker.dispatch(0, settingName, settingValue);
           }
           return _toolResult('Setting \'$settingName\' set to: $settingValue');
+        case 'set_vfo_frequency':
+          return _callSetVfoFrequency(args);
+        case 'set_ptt':
+          return _callSetPtt(args);
+        case 'set_dual_watch':
+          final did = _intArg(args, 'device_id');
+          final en = _boolArg(args, 'enabled');
+          _broker.dispatch(did, 'DualWatch', en, store: false);
+          return _toolResult('Dual watch ${en ? "enabled" : "disabled"}');
+        case 'set_scan':
+          final did = _intArg(args, 'device_id');
+          final en = _boolArg(args, 'enabled');
+          _broker.dispatch(did, 'Scan', en, store: false);
+          return _toolResult('Scanning ${en ? "started" : "stopped"}');
+        case 'set_output_volume':
+          final did = _intArg(args, 'device_id');
+          final lvl = _intArg(args, 'level');
+          if (lvl < 0 || lvl > 100) return _toolError('Volume must be 0-100');
+          _broker.dispatch(did, 'SetOutputVolume', lvl, store: false);
+          return _toolResult('Output volume set to $lvl');
+        case 'set_mute':
+          final did = _intArg(args, 'device_id');
+          final en = _boolArg(args, 'enabled');
+          _broker.dispatch(did, 'SetMute', en, store: false);
+          return _toolResult('Audio ${en ? "muted" : "unmuted"}');
+        case 'set_audio':
+          final did = _intArg(args, 'device_id');
+          final en = _boolArg(args, 'enabled');
+          _broker.dispatch(did, 'SetAudio', en, store: false);
+          return _toolResult('Audio ${en ? "enabled" : "disabled"}');
+        case 'set_gps':
+          final did = _intArg(args, 'device_id');
+          final en = _boolArg(args, 'enabled');
+          _broker.dispatch(did, 'SetGPS', en, store: false);
+          return _toolResult('GPS ${en ? "enabled" : "disabled"}');
+        case 'send_chat_message':
+          final msg = _stringArg(args, 'message');
+          if (msg.length > 4096) return _toolError('Message too long (max 4096)');
+          _broker.dispatch(1, 'Chat', msg, store: false);
+          return _toolResult('Chat message sent');
+        case 'send_morse':
+          final text = _stringArg(args, 'text');
+          _broker.dispatch(1, 'Morse', text, store: false);
+          return _toolResult('Morse transmission started');
+        case 'send_dtmf':
+          return _callSendDtmf(args);
+        case 'list_audio_clips':
+          return _callListAudioClips();
+        case 'play_audio_clip':
+          final did = _intArg(args, 'device_id');
+          final name = _stringArg(args, 'clip_name');
+          _broker.dispatch(did, 'PlayAudioClip', name, store: false);
+          return _toolResult('Playing clip: $name');
+        case 'stop_audio_clip':
+          final did = _intArg(args, 'device_id');
+          _broker.dispatch(did, 'StopAudioClip', null, store: false);
+          return _toolResult('Playback stopped');
+        case 'delete_audio_clip':
+          final clipName = _stringArg(args, 'clip_name');
+          _broker.dispatch(DataBroker.allDevices, 'DeleteAudioClip', clipName, store: false);
+          return _toolResult('Deleted clip: $clipName');
+        case 'enable_recording':
+          final did = _intArg(args, 'device_id');
+          _broker.dispatch(1, 'RecordingEnable', did, store: false);
+          return _toolResult('Recording enabled for device $did');
+        case 'disable_recording':
+          final did = _intArg(args, 'device_id');
+          _broker.dispatch(1, 'RecordingDisable', did, store: false);
+          return _toolResult('Recording disabled');
+        case 'write_channel':
+          return _callWriteChannel(args);
+        case 'set_software_modem':
+          final mode = _stringArg(args, 'mode');
+          const validModes = ['None', 'AFSK1200', 'PSK2400', 'PSK4800', 'G3RUH9600'];
+          if (!validModes.contains(mode)) return _toolError('Invalid mode. Use: ${validModes.join(", ")}');
+          _broker.dispatch(0, 'SetSoftwareModemMode', mode);
+          return _toolResult('Software modem set to $mode');
+        case 'get_databroker_state':
+          return _callGetDataBrokerState(args);
+        case 'get_app_setting':
+          return _callGetAppSetting(args);
+        case 'set_app_setting':
+          return _callSetAppSetting(args);
+        case 'dispatch_event':
+          return _callDispatchEvent(args);
         default:
           return _toolError('Unknown tool');
       }
@@ -501,6 +702,52 @@ class McpServer {
       _log('MCP tool error ($name): $e');
       return _toolError('Tool execution failed');
     }
+  }
+
+  bool _boolArg(Map<String, dynamic> args, String name) {
+    final val = args[name];
+    if (val is bool) return val;
+    if (val is int) return val != 0;
+    if (val is String) return val.toLowerCase() == 'true' || val == '1';
+    throw ArgumentError('Missing or invalid argument: $name');
+  }
+
+  double _doubleArg(Map<String, dynamic> args, String name) {
+    final val = args[name];
+    if (val is double) return val;
+    if (val is int) return val.toDouble();
+    if (val is String) {
+      final d = double.tryParse(val);
+      if (d != null) return d;
+    }
+    throw ArgumentError('Missing or invalid argument: $name');
+  }
+
+  String _optStringArg(Map<String, dynamic> args, String name, String defaultValue) {
+    final val = args[name];
+    if (val is String && val.isNotEmpty) return val;
+    return defaultValue;
+  }
+
+  int _optIntArg(Map<String, dynamic> args, String name, int defaultValue) {
+    final val = args[name];
+    if (val is int) return val;
+    if (val is String) {
+      final i = int.tryParse(val);
+      if (i != null) return i;
+    }
+    return defaultValue;
+  }
+
+  double _optDoubleArg(Map<String, dynamic> args, String name, double defaultValue) {
+    final val = args[name];
+    if (val is double) return val;
+    if (val is int) return val.toDouble();
+    if (val is String) {
+      final d = double.tryParse(val);
+      if (d != null) return d;
+    }
+    return defaultValue;
   }
 
   Map<String, dynamic> _callGetConnectedRadios() {
@@ -756,7 +1003,210 @@ class McpServer {
     _broker.logInfo(message);
   }
 
+  Map<String, dynamic> _callSetVfoFrequency(Map<String, dynamic> args) {
+    final deviceId = _intArg(args, 'device_id');
+    final freqMhz = _doubleArg(args, 'frequency_mhz');
+    final vfo = _optStringArg(args, 'vfo', 'A');
+    final modStr = _optStringArg(args, 'modulation', 'FM');
+    final bwStr = _optStringArg(args, 'bandwidth', 'narrow');
+    final power = _optIntArg(args, 'power', 0);
+
+    final freqHz = (freqMhz * 1000000).round();
+    if (freqHz <= 0) return _toolError('Invalid frequency');
+
+    final modulation = modStr == 'AM' ? 1 : (modStr == 'DMR' ? 2 : 0);
+    final bandwidth = bwStr == 'wide' ? 1 : 0;
+
+    // Create scratch channel and write it
+    final channelData = <String, dynamic>{
+      'Index': 999,
+      'RxFrequency': freqHz,
+      'TxFrequency': freqHz,
+      'Name': 'MCP',
+      'Modulation': modulation,
+      'Bandwidth': bandwidth,
+      'Power': power,
+    };
+    _broker.dispatch(deviceId, 'WriteChannel', channelData, store: false);
+
+    // Switch VFO to the scratch channel
+    final event = vfo == 'B' ? 'ChannelChangeVfoB' : 'ChannelChangeVfoA';
+    _broker.dispatch(deviceId, event, 999, store: false);
+
+    return _toolResult('VFO $vfo set to ${freqMhz}MHz ($modStr, $bwStr, power $power)');
+  }
+
+  Map<String, dynamic> _callSetPtt(Map<String, dynamic> args) {
+    final deviceId = _intArg(args, 'device_id');
+    final enabled = _boolArg(args, 'enabled');
+
+    if (enabled) {
+      if (_mcpPttActive) return _toolResult('PTT already active');
+      _mcpPttActive = true;
+      _mcpPttDeviceId = deviceId;
+      _broker.dispatch(1, 'ExternalPttState', true, store: false);
+
+      // Send periodic silence frames (6400 bytes = 100ms at 32kHz 16-bit mono)
+      _mcpPttSilenceTimer = Timer.periodic(const Duration(milliseconds: 80), (_) {
+        if (!_mcpPttActive) return;
+        final silence = Uint8List(6400);
+        _broker.dispatch(_mcpPttDeviceId, 'TransmitVoicePCM', silence, store: false);
+      });
+
+      // Auto-release after 30 seconds
+      _mcpPttTimeoutTimer = Timer(const Duration(seconds: 30), () {
+        if (_mcpPttActive) {
+          _releasePtt();
+          _log('MCP PTT auto-released after 30s timeout');
+        }
+      });
+
+      return _toolResult('PTT keyed on device $deviceId');
+    } else {
+      if (!_mcpPttActive) return _toolResult('PTT not active');
+      _releasePtt();
+      return _toolResult('PTT released');
+    }
+  }
+
+  void _releasePtt() {
+    _mcpPttActive = false;
+    _mcpPttSilenceTimer?.cancel();
+    _mcpPttSilenceTimer = null;
+    _mcpPttTimeoutTimer?.cancel();
+    _mcpPttTimeoutTimer = null;
+    _broker.dispatch(1, 'ExternalPttState', false, store: false);
+  }
+
+  Map<String, dynamic> _callSendDtmf(Map<String, dynamic> args) {
+    final deviceId = _intArg(args, 'device_id');
+    final digits = _stringArg(args, 'digits');
+
+    // Validate DTMF digits
+    final validChars = RegExp(r'^[0-9A-Da-d*#]+$');
+    if (!validChars.hasMatch(digits)) {
+      return _toolError('Invalid DTMF digits. Use 0-9, A-D, *, #');
+    }
+
+    try {
+      final pcm = DtmfEngine.generateDtmfPcm(digits);
+      _broker.dispatch(deviceId, 'TransmitVoicePCM', pcm, store: false);
+      return _toolResult('DTMF sent: $digits');
+    } catch (e) {
+      return _toolError('DTMF generation failed');
+    }
+  }
+
+  Map<String, dynamic> _callListAudioClips() {
+    final clips = _broker.getValueDynamic(0, 'AudioClips');
+    if (clips is! List || clips.isEmpty) {
+      return _toolResult('No audio clips');
+    }
+    final clipList = <Map<String, dynamic>>[];
+    for (final clip in clips) {
+      if (clip is Map) {
+        clipList.add({
+          'name': clip['Name'] ?? clip['name'] ?? '',
+          'duration': clip['Duration'] ?? clip['duration'] ?? 0,
+          'size': clip['Size'] ?? clip['size'] ?? 0,
+        });
+      }
+    }
+    return _toolResult(jsonEncode(clipList));
+  }
+
+  Map<String, dynamic> _callWriteChannel(Map<String, dynamic> args) {
+    final deviceId = _intArg(args, 'device_id');
+    final index = _intArg(args, 'channel_index');
+    final rxFreqMhz = _doubleArg(args, 'rx_frequency_mhz');
+    final txFreqMhz = _optDoubleArg(args, 'tx_frequency_mhz', rxFreqMhz);
+    final name = _optStringArg(args, 'name', '');
+    final modStr = _optStringArg(args, 'modulation', 'FM');
+    final bwStr = _optStringArg(args, 'bandwidth', 'narrow');
+    final power = _optIntArg(args, 'power', 0);
+    final txTone = _optDoubleArg(args, 'tx_tone_hz', 0);
+    final rxTone = _optDoubleArg(args, 'rx_tone_hz', 0);
+
+    final rxHz = (rxFreqMhz * 1000000).round();
+    final txHz = (txFreqMhz * 1000000).round();
+    if (rxHz <= 0) return _toolError('Invalid RX frequency');
+
+    final modulation = modStr == 'AM' ? 1 : (modStr == 'DMR' ? 2 : 0);
+    final bandwidth = bwStr == 'wide' ? 1 : 0;
+
+    final channelData = <String, dynamic>{
+      'Index': index,
+      'RxFrequency': rxHz,
+      'TxFrequency': txHz,
+      'Name': name.length > 10 ? name.substring(0, 10) : name,
+      'Modulation': modulation,
+      'Bandwidth': bandwidth,
+      'Power': power,
+      'TxTone': (txTone * 10).round(),
+      'RxTone': (rxTone * 10).round(),
+    };
+    _broker.dispatch(deviceId, 'WriteChannel', channelData, store: false);
+    return _toolResult('Channel $index written: ${rxFreqMhz}MHz');
+  }
+
+  Map<String, dynamic> _callGetDataBrokerState(Map<String, dynamic> args) {
+    if (DataBroker.getValue<int>(0, 'McpDebugToolsEnabled', 0) != 1) {
+      return _toolError('Debug tools not enabled');
+    }
+    final deviceId = _intArg(args, 'device_id');
+    final values = DataBroker.getDeviceValues(deviceId);
+    if (values.isEmpty) {
+      return _toolResult('No values for device $deviceId');
+    }
+    final filtered = <String, dynamic>{};
+    for (final entry in values.entries) {
+      if (!_debugBlacklist.contains(entry.key)) {
+        filtered[entry.key] = '${entry.value}';
+      }
+    }
+    return _toolResult(jsonEncode(filtered));
+  }
+
+  Map<String, dynamic> _callGetAppSetting(Map<String, dynamic> args) {
+    if (DataBroker.getValue<int>(0, 'McpDebugToolsEnabled', 0) != 1) {
+      return _toolError('Debug tools not enabled');
+    }
+    final name = _stringArg(args, 'name');
+    if (_debugBlacklist.contains(name)) return _toolError('Setting is restricted');
+    final value = DataBroker.getValueDynamic(0, name);
+    return _toolResult('$name = ${value ?? "(not set)"}');
+  }
+
+  Map<String, dynamic> _callSetAppSetting(Map<String, dynamic> args) {
+    if (DataBroker.getValue<int>(0, 'McpDebugToolsEnabled', 0) != 1) {
+      return _toolError('Debug tools not enabled');
+    }
+    final name = _stringArg(args, 'name');
+    final value = _stringArg(args, 'value');
+    if (_debugBlacklist.contains(name)) return _toolError('Setting is restricted');
+    final intVal = int.tryParse(value);
+    if (intVal != null) {
+      _broker.dispatch(0, name, intVal);
+    } else {
+      _broker.dispatch(0, name, value);
+    }
+    return _toolResult('$name set to $value');
+  }
+
+  Map<String, dynamic> _callDispatchEvent(Map<String, dynamic> args) {
+    if (DataBroker.getValue<int>(0, 'McpDebugToolsEnabled', 0) != 1) {
+      return _toolError('Debug tools not enabled');
+    }
+    final deviceId = _intArg(args, 'device_id');
+    final name = _stringArg(args, 'name');
+    final value = args['value'];
+    if (_debugBlacklist.contains(name)) return _toolError('Event name is restricted');
+    _broker.dispatch(deviceId, name, value, store: false);
+    return _toolResult('Event dispatched: $name to device $deviceId');
+  }
+
   void dispose() {
+    _releasePtt();
     _stop();
     _broker.dispose();
   }

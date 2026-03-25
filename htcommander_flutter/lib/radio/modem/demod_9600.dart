@@ -39,7 +39,7 @@ class SlicerState {
 // Demodulator state (shared base)
 // ---------------------------------------------------------------------------
 
-/// Common demodulator state shared between 9600 and PSK demodulators.
+/// Common demodulator state shared between 9600, PSK, and AFSK demodulators.
 class DemodulatorState {
   static const double ticksPerPllCycle = 256.0 * 256.0 * 256.0 * 256.0;
 
@@ -54,10 +54,66 @@ class DemodulatorState {
   double mPeak = 0;
   double mValley = 0;
 
+  // AFSK-specific fields (used by DemodAfsk)
+  String profile = 'A';
+  int usePrefilter = 0;
+  double prefilterBaud = 0;
+  double preFilterLenSym = 0;
+  BpWindowType preWindow = BpWindowType.truncated;
+  int preFilterTaps = 0;
+  final Float64List preFilter = Float64List(Dsp.maxFilterSize);
+  final Float64List rawCb = Float64List(Dsp.maxFilterSize);
+  double lpfBaud = 0;
+  double lpFilterWidthSym = 0;
+  BpWindowType lpWindow = BpWindowType.truncated;
+  int lpFilterTaps = 0;
+  final Float64List lpFilter = Float64List(Dsp.maxFilterSize);
+  double agcFastAttack = 0.70;
+  double agcSlowDecay = 0.000090;
+  double sPeak = 0;
+  double sValley = 0;
+  double alevelRecPeak = 0;
+  double alevelRecValley = 0;
+
+  /// AFSK oscillator/mixer state.
+  final AfskState afsk = AfskState();
+
   final List<SlicerState> slicer;
 
   DemodulatorState({int maxSlicers = 9})
       : slicer = List.generate(maxSlicers, (_) => SlicerState());
+}
+
+/// AFSK-specific oscillator, mixer, and filter state.
+class AfskState {
+  // Local oscillators for Mark, Space, and Center frequencies
+  int mOscPhase = 0;
+  int mOscDelta = 0;
+  int sOscPhase = 0;
+  int sOscDelta = 0;
+  int cOscPhase = 0;
+  int cOscDelta = 0;
+
+  // Mixer outputs for Mark (profile A)
+  final Float64List mIRaw = Float64List(Dsp.maxFilterSize);
+  final Float64List mQRaw = Float64List(Dsp.maxFilterSize);
+
+  // Mixer outputs for Space (profile A)
+  final Float64List sIRaw = Float64List(Dsp.maxFilterSize);
+  final Float64List sQRaw = Float64List(Dsp.maxFilterSize);
+
+  // Mixer outputs for Center (profile B)
+  final Float64List cIRaw = Float64List(Dsp.maxFilterSize);
+  final Float64List cQRaw = Float64List(Dsp.maxFilterSize);
+
+  // Root Raised Cosine filter settings
+  int useRrc = 0;
+  double rrcWidthSym = 0;
+  double rrcRolloff = 0;
+
+  // For FM demodulator (profile B)
+  double prevPhase = 0;
+  double normalizeRpsam = 0;
 }
 
 // ---------------------------------------------------------------------------

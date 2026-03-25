@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'audio_service.dart';
 
 /// Callback types for Bluetooth transport events.
 typedef OnDataReceived = void Function(Exception? error, Uint8List? data);
@@ -65,11 +66,20 @@ class CompatibleDevice {
 
 /// Abstract platform services factory.
 abstract class PlatformServices {
+  /// Global instance set during app initialization.
+  static PlatformServices? instance;
+
   /// Creates a Bluetooth transport for the given radio.
   RadioBluetoothTransport createRadioBluetooth(String macAddress);
 
   /// Creates an audio transport for the given radio.
   RadioAudioTransport createRadioAudioTransport();
+
+  /// Creates an audio output for decoded radio audio playback.
+  AudioOutput createAudioOutput();
+
+  /// Creates a microphone capture for radio transmission.
+  MicCapture createMicCapture();
 
   /// Scans for compatible Bluetooth devices.
   Future<List<CompatibleDevice>> scanForDevices();

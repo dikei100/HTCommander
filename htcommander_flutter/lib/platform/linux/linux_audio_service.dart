@@ -4,12 +4,13 @@ import 'dart:typed_data';
 import '../../core/data_broker.dart';
 import '../../core/data_broker_client.dart';
 import '../../radio/audio_resampler.dart';
+import '../audio_service.dart';
 
 /// Linux audio output — pipes decoded PCM to paplay subprocess.
 ///
 /// PortAudio opened as stereo on Linux, so mono samples are duplicated
 /// to both channels (matching C# LinuxAudioOutput pattern).
-class LinuxAudioOutput {
+class LinuxAudioOutput implements AudioOutput {
   Process? _paplay;
   IOSink? _stdin;
   bool _running = false;
@@ -87,7 +88,7 @@ class LinuxAudioOutput {
 ///
 /// parecord is used instead of PortAudio because PortAudio's ALSA
 /// capture path is broken on PipeWire systems (mmap errors).
-class LinuxMicCapture {
+class LinuxMicCapture implements MicCapture {
   Process? _parecord;
   bool _running = false;
   final DataBrokerClient _broker = DataBrokerClient();

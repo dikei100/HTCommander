@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import '../core/data_broker.dart';
 import '../core/data_broker_client.dart';
+import '../dialogs/aprs_route_dialog.dart';
 import '../widgets/glass_card.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -28,12 +32,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // General
   String _theme = 'Dark';
   String _callSign = '';
-  String _stationId = 'Primary';
+  int _stationId = 0;
   bool _allowTransmit = false;
   bool _checkForUpdates = true;
 
   // APRS
-  final List<String> _aprsRoutes = ['WIDE1-1,WIDE2-1', 'WIDE1-1'];
+  List<Map<String, String>> _aprsRoutes = [];
+  String? _portConflictWarning;
 
   // Voice
   String _language = 'English';
@@ -73,6 +78,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // Modem
   String _modemMode = 'None';
 
+  // Additional toggles
+  bool _catServerEnabled = false;
+  bool _virtualAudioEnabled = false;
+  bool _mcpDebugToolsEnabled = false;
+  bool _showAllChannels = false;
+  bool _showAirplanesOnMap = false;
+
   // TextEditingControllers for persistent text fields
   late final TextEditingController _callSignController;
   late final TextEditingController _winlinkPasswordController;
@@ -93,7 +105,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Load all settings from DataBroker device 0
     _theme = DataBroker.getValue<String>(0, 'Theme', 'Dark');
     _callSign = DataBroker.getValue<String>(0, 'CallSign', '');
-    _stationId = DataBroker.getValue<String>(0, 'StationId', 'Primary');
+    _stationId = DataBroker.getValue<int>(0, 'StationId', 0);
+    _loadAprsRoutes();
     _allowTransmit = DataBroker.getValue<int>(0, 'AllowTransmit', 0) == 1;
     _checkForUpdates =
         DataBroker.getValue<int>(0, 'CheckForUpdates', 1) == 1;
@@ -133,6 +146,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _micGain = DataBroker.getValue<int>(0, 'MicGain', 100).toDouble();
 
     _modemMode = DataBroker.getValue<String>(0, 'ModemMode', 'None');
+
+    _catServerEnabled =
+        DataBroker.getValue<int>(0, 'CatServerEnabled', 0) == 1;
+    _virtualAudioEnabled =
+        DataBroker.getValue<int>(0, 'VirtualAudioEnabled', 0) == 1;
+    _mcpDebugToolsEnabled =
+        DataBroker.getValue<int>(0, 'McpDebugToolsEnabled', 0) == 1;
+    _showAllChannels =
+        DataBroker.getValue<int>(0, 'ShowAllChannels', 0) == 1;
+    _showAirplanesOnMap =
+        DataBroker.getValue<int>(0, 'ShowAirplanesOnMap', 0) == 1;
 
     _language = DataBroker.getValue<String>(0, 'Language', 'English');
     _ttsVoice = DataBroker.getValue<String>(0, 'TtsVoice', 'Default');
@@ -330,12 +354,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const SizedBox(height: 10),
               _dropdownRow(
-                'Station ID',
-                _stationId,
-                ['Primary', 'Secondary', 'Portable', 'Mobile'],
+                'Station ID (SSID)',
+                _stationId.toString(),
+                List.generate(16, (i) => i.toString()),
                 (v) {
-                  setState(() => _stationId = v);
-                  _broker.dispatch(0, 'StationId', v);
+                  setState(() => _stationId = int.tryParse(v) ?? 0);
+                  _broker.dispatch(0, 'StationId', _stationId);
                 },
                 colors,
               ),
@@ -396,6 +420,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _sectionLabel('CHANNELS', colors),
+              const SizedBox(height: 12),
+              _checkboxRow(
+                'Show All Channels',
+                _showAllChannels,
+                (v) {
+                  setState(() => _showAllChannels = v);
+                  _broker.dispatch(0, 'ShowAllChannels', v ? 1 : 0);
+                },
+                colors,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 28),
+                child: Text(
+                  'Show all channel slots including empty ones',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               _sectionLabel('MAINTENANCE', colors),
               const SizedBox(height: 12),
               OutlinedButton.icon(
@@ -442,13 +495,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: EdgeInsets.zero,
                     constraints:
                         const BoxConstraints(minWidth: 28, minHeight: 28),
-                    onPressed: () {},
+                    onPressed: () => _addAprsRoute(),
                     tooltip: 'Add Route',
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               ..._aprsRoutes.asMap().entries.map((entry) {
+                final route = entry.value;
+                final name = route['name'] ?? '';
+                final path = route['path'] ?? '';
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
@@ -462,7 +518,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            entry.value,
+                            name.isNotEmpty ? '$name: $path' : path,
                             style: TextStyle(
                               fontSize: 11,
                               fontFamily: 'monospace',
@@ -477,7 +533,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(
                             minWidth: 28, minHeight: 28),
-                        onPressed: () {},
+                        onPressed: () => _editAprsRoute(entry.key),
                         tooltip: 'Edit',
                       ),
                       IconButton(
@@ -486,7 +542,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(
                             minWidth: 28, minHeight: 28),
-                        onPressed: () {},
+                        onPressed: () => _deleteAprsRoute(entry.key),
                         tooltip: 'Delete',
                       ),
                     ],
@@ -600,9 +656,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ─── Servers ──────────────────────────────────────────────────────
 
   Widget _buildServers(ColorScheme colors) {
+    _checkPortConflicts();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_portConflictWarning != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: colors.errorContainer,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber, size: 16, color: colors.error),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _portConflictWarning!,
+                      style: TextStyle(
+                          fontSize: 10, color: colors.onErrorContainer),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -691,6 +772,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
           },
           colors,
         ),
+        const SizedBox(height: 10),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionLabel('MCP DEBUG TOOLS', colors),
+              const SizedBox(height: 12),
+              _checkboxRow(
+                'Enabled',
+                _mcpDebugToolsEnabled,
+                (v) {
+                  setState(() => _mcpDebugToolsEnabled = v);
+                  _broker.dispatch(0, 'McpDebugToolsEnabled', v ? 1 : 0);
+                },
+                colors,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionLabel('CAT SERIAL (TS-2000)', colors),
+              const SizedBox(height: 12),
+              _checkboxRow(
+                'Enabled',
+                _catServerEnabled,
+                (v) {
+                  setState(() => _catServerEnabled = v);
+                  _broker.dispatch(0, 'CatServerEnabled', v ? 1 : 0);
+                },
+                colors,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 28),
+                child: Text(
+                  'Virtual serial port for Kenwood TS-2000 CAT control',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -744,13 +873,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               _sectionLabel('AIRPLANE TRACKING', colors),
               const SizedBox(height: 12),
-              _textFieldRowWithController(
-                'Tracking URL',
-                _airplaneUrlController,
-                null,
+              Row(
+                children: [
+                  Expanded(
+                    child: _textFieldRowWithController(
+                      'Tracking URL',
+                      _airplaneUrlController,
+                      null,
+                      (v) {
+                        _airplaneUrl = v;
+                        _broker.dispatch(0, 'AirplaneUrl', v);
+                      },
+                      colors,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    height: 28,
+                    child: FilledButton.tonal(
+                      onPressed: _testAirplaneUrl,
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                      child: const Text('TEST', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 1)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _checkboxRow(
+                'Show Airplanes on Map',
+                _showAirplanesOnMap,
                 (v) {
-                  _airplaneUrl = v;
-                  _broker.dispatch(0, 'AirplaneUrl', v);
+                  setState(() => _showAirplanesOnMap = v);
+                  _broker.dispatch(0, 'ShowAirplanesOnMap', v ? 1 : 0);
                 },
                 colors,
               ),
@@ -927,6 +1083,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
                 colors,
                 valueLabel: '${_micGain.round()}%',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionLabel('VIRTUAL AUDIO', colors),
+              const SizedBox(height: 12),
+              _checkboxRow(
+                'Enabled',
+                _virtualAudioEnabled,
+                (v) {
+                  setState(() => _virtualAudioEnabled = v);
+                  _broker.dispatch(0, 'VirtualAudioEnabled', v ? 1 : 0);
+                },
+                colors,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 28),
+                child: Text(
+                  'Route radio audio through virtual PulseAudio devices for external software',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
               ),
             ],
           ),
@@ -1281,6 +1466,112 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
       ],
     );
+  }
+
+  // ─── APRS route helpers ─────────────────────────────────────────
+
+  void _loadAprsRoutes() {
+    final routesJson = DataBroker.getValue<String>(0, 'AprsRoutes', '');
+    if (routesJson.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(routesJson);
+        if (decoded is List) {
+          _aprsRoutes = decoded
+              .whereType<Map>()
+              .map((m) => Map<String, String>.from(m))
+              .toList();
+        }
+      } catch (_) {}
+    }
+    if (_aprsRoutes.isEmpty) {
+      _aprsRoutes = [
+        {'name': 'Default', 'path': 'WIDE1-1,WIDE2-1'},
+      ];
+    }
+  }
+
+  void _saveAprsRoutes() {
+    _broker.dispatch(0, 'AprsRoutes', jsonEncode(_aprsRoutes));
+  }
+
+  Future<void> _addAprsRoute() async {
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (_) => const AprsRouteDialog(),
+    );
+    if (result != null) {
+      setState(() => _aprsRoutes.add(result));
+      _saveAprsRoutes();
+    }
+  }
+
+  Future<void> _editAprsRoute(int index) async {
+    final route = _aprsRoutes[index];
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (_) => AprsRouteDialog(
+        initialName: route['name'],
+        initialPath: route['path'],
+      ),
+    );
+    if (result != null) {
+      setState(() => _aprsRoutes[index] = result);
+      _saveAprsRoutes();
+    }
+  }
+
+  void _deleteAprsRoute(int index) {
+    setState(() => _aprsRoutes.removeAt(index));
+    _saveAprsRoutes();
+  }
+
+  // ─── Port conflict detection ────────────────────────────────────
+
+  void _checkPortConflicts() {
+    final ports = <String, int>{};
+    if (_webServerEnabled) ports['Web'] = _webServerPort;
+    if (_agwpeEnabled) ports['AGWPE'] = _agwpePort;
+    if (_rigctldEnabled) ports['Rigctld'] = _rigctldPort;
+    if (_mcpServerEnabled) ports['MCP'] = _mcpServerPort;
+
+    final seen = <int, String>{};
+    final conflicts = <String>[];
+    for (final entry in ports.entries) {
+      if (seen.containsKey(entry.value)) {
+        conflicts.add('${entry.key} and ${seen[entry.value]} share port ${entry.value}');
+      } else {
+        seen[entry.value] = entry.key;
+      }
+    }
+    _portConflictWarning =
+        conflicts.isNotEmpty ? 'Port conflict: ${conflicts.join('; ')}' : null;
+  }
+
+  // ─── Airplane tracking test ─────────────────────────────────────
+
+  Future<void> _testAirplaneUrl() async {
+    final url = _airplaneUrlController.text.trim();
+    if (url.isEmpty) return;
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 5);
+      final request = await client.getUrl(Uri.parse(url));
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      client.close();
+      if (!mounted) return;
+      final lines = body.split('\n').where((l) => l.trim().isNotEmpty).length;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('OK: ${response.statusCode}, $lines lines received'),
+        duration: const Duration(seconds: 3),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Error: $e'),
+        duration: const Duration(seconds: 3),
+      ));
+    }
   }
 }
 

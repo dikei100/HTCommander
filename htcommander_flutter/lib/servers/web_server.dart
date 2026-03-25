@@ -11,7 +11,9 @@ import 'dart:typed_data';
 
 import '../core/data_broker.dart';
 import '../core/data_broker_client.dart';
+import '../radio/audio_resampler.dart';
 import 'http_server.dart';
+import 'tls_certificate_manager.dart';
 
 /// WebSocket audio bridge for mobile PTT and bidirectional audio streaming.
 ///
@@ -62,6 +64,9 @@ class WebAudioBridge {
       } else {
         return;
       }
+
+      // Resample 32kHz → 48kHz for web clients.
+      pcmBytes = AudioResampler.resample16BitMono(pcmBytes, 32000, 48000);
 
       // Prepend 0x01 command byte
       final frame = Uint8List(1 + pcmBytes.length);
@@ -221,7 +226,8 @@ class WebAudioBridge {
     final pcmLength = data.length - 1;
     if (pcmLength <= 0 || pcmLength > 19200) return; // Cap frame size
 
-    final pcm = data.sublist(1);
+    // Resample 48kHz → 32kHz for the radio.
+    final pcm = AudioResampler.resample16BitMono(data.sublist(1), 48000, 32000);
     _broker.dispatch(radioId, 'TransmitVoicePCM', pcm, store: false);
   }
 
@@ -303,6 +309,7 @@ class WebServer {
     _broker.subscribe(0, 'WebServerEnabled', _onSettingChanged);
     _broker.subscribe(0, 'WebServerPort', _onSettingChanged);
     _broker.subscribe(0, 'ServerBindAll', _onSettingChanged);
+    _broker.subscribe(0, 'TlsEnabled', _onSettingChanged);
 
     // Default web root
     _webRoot = '${Directory.current.path}/web';
@@ -336,11 +343,29 @@ class WebServer {
     if (_running) return;
     try {
       final bindAll = _broker.getValue<int>(0, 'ServerBindAll', 0) == 1;
+      final tlsEnabled = _broker.getValue<int>(0, 'TlsEnabled', 0) == 1;
       final address =
           bindAll ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4;
-      _httpServer = await HttpServer.bind(address, _port, shared: true);
-      _running = true;
-      _log('Web server started on port $_port');
+
+      if (tlsEnabled) {
+        final configDir = '${Platform.environment['HOME'] ?? '.'}/.config/HTCommander';
+        final context = await TlsCertificateManager.getOrCreateContext(configDir);
+        if (context != null) {
+          _httpServer = await HttpServer.bindSecure(
+              address, _port, context, shared: true);
+          _running = true;
+          _log('Web server started on port $_port (HTTPS)');
+        } else {
+          // TLS cert generation failed — fall back to HTTP
+          _httpServer = await HttpServer.bind(address, _port, shared: true);
+          _running = true;
+          _log('Web server started on port $_port (HTTP, TLS cert failed)');
+        }
+      } else {
+        _httpServer = await HttpServer.bind(address, _port, shared: true);
+        _running = true;
+        _log('Web server started on port $_port (HTTP)');
+      }
 
       _httpServer!.listen(
         (request) async {

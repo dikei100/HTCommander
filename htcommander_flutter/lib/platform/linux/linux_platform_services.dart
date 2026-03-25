@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import '../../platform/audio_service.dart';
 import '../../platform/bluetooth_service.dart';
+import 'linux_audio_service.dart';
 import 'linux_audio_transport.dart';
 import 'linux_bluetooth.dart';
 
@@ -27,6 +29,12 @@ class LinuxPlatformServices extends PlatformServices {
   RadioAudioTransport createRadioAudioTransport() {
     return LinuxRadioAudioTransport();
   }
+
+  @override
+  AudioOutput createAudioOutput() => LinuxAudioOutput();
+
+  @override
+  MicCapture createMicCapture() => LinuxMicCapture();
 
   /// Scans for compatible Bluetooth devices using `bluetoothctl devices`.
   ///
