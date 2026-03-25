@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'app.dart';
 import 'app_init.dart';
@@ -22,6 +23,9 @@ Future<void> main() async {
   if (Platform.isWindows) {
     final appData = Platform.environment['APPDATA'] ?? '.';
     appDataPath = '$appData\\HTCommander';
+  } else if (Platform.isAndroid) {
+    final dir = await getApplicationDocumentsDirectory();
+    appDataPath = dir.path;
   } else {
     final home = Platform.environment['HOME'] ?? '.';
     appDataPath = '$home/.local/share/HTCommander';

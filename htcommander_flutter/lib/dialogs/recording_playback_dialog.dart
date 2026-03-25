@@ -46,13 +46,30 @@ class _RecordingPlaybackDialogState extends State<RecordingPlaybackDialog> {
     });
 
     try {
-      // Use paplay for Linux audio playback
-      _playProcess = await Process.start('paplay', [
-        '--format=s16le',
-        '--rate=32000',
-        '--channels=1',
-        widget.filePath,
-      ]);
+      if (Platform.isLinux) {
+        // Use paplay for Linux audio playback
+        _playProcess = await Process.start('paplay', [
+          '--format=s16le',
+          '--rate=32000',
+          '--channels=1',
+          widget.filePath,
+        ]);
+      } else if (Platform.isWindows) {
+        // Use PowerShell for Windows audio playback
+        _playProcess = await Process.start('powershell', [
+          '-Command',
+          '(New-Object Media.SoundPlayer "${widget.filePath}").PlaySync()',
+        ]);
+      } else {
+        // Android / other — not yet supported via subprocess
+        if (mounted) {
+          setState(() {
+            _isPlaying = false;
+            _statusText = 'Playback not available on this platform';
+          });
+        }
+        return;
+      }
 
       _playProcess!.exitCode.then((_) {
         if (mounted) {

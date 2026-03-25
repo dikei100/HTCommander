@@ -20,6 +20,7 @@ import 'platform/linux/linux_speech_service.dart';
 import 'platform/linux/linux_whisper_engine.dart';
 import 'platform/windows/windows_speech_service.dart';
 import 'platform/windows/windows_whisper_engine.dart';
+import 'platform/android/android_speech_service.dart';
 import 'servers/agwpe_server.dart';
 import 'servers/cat_serial_server.dart';
 import 'servers/mcp_server.dart';
@@ -50,6 +51,9 @@ void initializeDataHandlers() {
     voiceHandler.speechService = WindowsSpeechService();
     VoiceHandler.whisperEngineFactory =
         (modelPath, language) => WindowsWhisperEngine(modelPath, language);
+  } else if (Platform.isAndroid) {
+    voiceHandler.speechService = AndroidSpeechService();
+    // Whisper STT not yet available on Android
   }
   DataBroker.addDataHandler('VoiceHandler', voiceHandler);
   DataBroker.addDataHandler('WinlinkClient', WinlinkClient());

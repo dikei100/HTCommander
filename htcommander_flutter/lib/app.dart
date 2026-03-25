@@ -10,6 +10,7 @@ import 'radio/models/radio_channel_info.dart';
 import 'platform/bluetooth_service.dart';
 import 'platform/linux/linux_platform_services.dart';
 import 'platform/windows/windows_platform_services.dart';
+import 'platform/android/android_platform_services.dart';
 import 'theme/signal_protocol_theme.dart';
 import 'widgets/sidebar_nav.dart';
 import 'screens/communication_screen.dart';
@@ -25,8 +26,46 @@ import 'screens/map_screen.dart';
 import 'screens/debug_screen.dart';
 import 'screens/settings_screen.dart';
 
-class HTCommanderApp extends StatelessWidget {
+class HTCommanderApp extends StatefulWidget {
   const HTCommanderApp({super.key});
+
+  @override
+  State<HTCommanderApp> createState() => _HTCommanderAppState();
+}
+
+class _HTCommanderAppState extends State<HTCommanderApp> {
+  final DataBrokerClient _broker = DataBrokerClient();
+  ThemeMode _themeMode = ThemeMode.dark;
+
+  @override
+  void initState() {
+    super.initState();
+    _themeMode = _parseThemeMode(DataBroker.getValue<String>(0, 'Theme', 'Dark'));
+    _broker.subscribe(0, 'Theme', _onThemeChanged);
+  }
+
+  @override
+  void dispose() {
+    _broker.dispose();
+    super.dispose();
+  }
+
+  void _onThemeChanged(int deviceId, String name, Object? data) {
+    if (data is String && mounted) {
+      setState(() => _themeMode = _parseThemeMode(data));
+    }
+  }
+
+  static ThemeMode _parseThemeMode(String value) {
+    switch (value) {
+      case 'Light':
+        return ThemeMode.light;
+      case 'Auto':
+        return ThemeMode.system;
+      default:
+        return ThemeMode.dark;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +74,7 @@ class HTCommanderApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: SignalProtocolTheme.light(),
       darkTheme: SignalProtocolTheme.dark(),
-      themeMode: ThemeMode.dark,
+      themeMode: _themeMode,
       home: const AppShell(),
     );
   }
@@ -137,6 +176,8 @@ class _AppShellState extends State<AppShell> {
       _platformServices = LinuxPlatformServices();
     } else if (Platform.isWindows) {
       _platformServices = WindowsPlatformServices();
+    } else if (Platform.isAndroid) {
+      _platformServices = AndroidPlatformServices();
     }
     PlatformServices.instance = _platformServices;
   }
@@ -306,6 +347,7 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _lookupBluetoothName(String mac) async {
+    if (!Platform.isLinux) return; // bluetoothctl is Linux-only (BlueZ)
     final clean = mac.replaceAll(':', '').replaceAll('-', '').toUpperCase();
     final macColon = List.generate(6, (i) => clean.substring(i * 2, i * 2 + 2)).join(':');
     try {

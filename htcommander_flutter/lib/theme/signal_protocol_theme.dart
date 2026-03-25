@@ -175,6 +175,32 @@ class SignalProtocolTheme {
         backgroundColor: _lightSurfaceContainerLow,
         indicatorColor: _lightPrimaryContainer,
       ),
+      scrollbarTheme: ScrollbarThemeData(
+        thickness: WidgetStatePropertyAll(4),
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.hovered)) return _lightPrimary;
+          return _lightSurfaceContainerHigh;
+        }),
+        radius: const Radius.circular(2),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: _lightSurface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: _lightOutlineVariant.withAlpha(38)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: _lightOutlineVariant.withAlpha(38)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(4),
+          borderSide: BorderSide(color: _lightPrimary),
+        ),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
     );
   }
 }

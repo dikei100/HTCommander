@@ -15,7 +15,8 @@ class AprsScreen extends StatefulWidget {
 class _AprsScreenState extends State<AprsScreen> {
   final DataBrokerClient _broker = DataBrokerClient();
   bool _showAll = false;
-  bool _showWarning = true;
+  bool _showWarning = false;
+  bool _warningDismissed = false;
   String _selectedRoute = 'WIDE1-1,WIDE2-1';
   final TextEditingController _destinationController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
@@ -33,8 +34,11 @@ class _AprsScreenState extends State<AprsScreen> {
   void initState() {
     super.initState();
     _broker.subscribe(1, 'AprsStoreUpdated', _onAprsStoreUpdated);
+    _broker.subscribe(DataBroker.allDevices, 'Channels', _onChannelsChanged);
+    _broker.subscribe(DataBroker.allDevices, 'State', _onRadioStateChanged);
     // Load initial data
     _loadEntries();
+    _checkAprsChannel();
   }
 
   void _loadEntries() {
@@ -49,6 +53,38 @@ class _AprsScreenState extends State<AprsScreen> {
 
   void _onAprsStoreUpdated(int deviceId, String name, Object? data) {
     _loadEntries();
+  }
+
+  void _onChannelsChanged(int deviceId, String name, Object? data) {
+    if (deviceId < 100) return;
+    _checkAprsChannel();
+  }
+
+  void _onRadioStateChanged(int deviceId, String name, Object? data) {
+    if (deviceId < 100) return;
+    _checkAprsChannel();
+  }
+
+  void _checkAprsChannel() {
+    if (_warningDismissed || !mounted) return;
+    // Check if any connected radio has an APRS channel
+    bool hasAprs = false;
+    for (int id = 100; id < 110; id++) {
+      final channels = DataBroker.getValueDynamic(id, 'Channels');
+      if (channels is List) {
+        for (final ch in channels) {
+          if (ch != null && ch is Map && ch['name'] == 'APRS') {
+            hasAprs = true;
+            break;
+          }
+        }
+      }
+      if (hasAprs) break;
+    }
+    // Also check if any radio is connected
+    final state = DataBroker.getValueDynamic(100, 'State');
+    final isConnected = state is String && state == 'connected';
+    setState(() => _showWarning = isConnected && !hasAprs);
   }
 
   @override
@@ -588,7 +624,10 @@ class _AprsScreenState extends State<AprsScreen> {
             icon: const Icon(Icons.close, size: 14),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-            onPressed: () => setState(() => _showWarning = false),
+            onPressed: () => setState(() {
+              _showWarning = false;
+              _warningDismissed = true;
+            }),
           ),
         ],
       ),

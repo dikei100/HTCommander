@@ -18,12 +18,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _selectedCategory = 'General';
   late final DataBrokerClient _broker;
 
-  final List<_SettingsCategory> _categories = [
+  late final List<_SettingsCategory> _categories = [
     _SettingsCategory('General', Icons.settings),
     _SettingsCategory('APRS', Icons.cell_tower),
     _SettingsCategory('Voice', Icons.mic),
     _SettingsCategory('Winlink', Icons.email),
-    _SettingsCategory('Servers', Icons.dns),
+    if (!Platform.isAndroid) _SettingsCategory('Servers', Icons.dns),
     _SettingsCategory('Data Sources', Icons.storage),
     _SettingsCategory('Audio', Icons.volume_up),
     _SettingsCategory('Modem', Icons.router),
@@ -914,6 +914,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 10),
+        if (!Platform.isAndroid)
         GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1088,6 +1089,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 10),
+        if (Platform.isLinux)
         GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

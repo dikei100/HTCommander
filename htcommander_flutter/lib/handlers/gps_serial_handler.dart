@@ -74,6 +74,12 @@ class GpsSerialHandler {
   }
 
   Future<void> _startPortAsync(String portName, int baudRate) async {
+    // Serial port configuration requires stty (Linux/macOS only)
+    if (!Platform.isLinux && !Platform.isMacOS) {
+      _broker.dispatch(1, 'GpsStatus', 'PortError', store: true);
+      return;
+    }
+
     try {
       // Configure serial port via stty (Linux)
       final sttyResult = await Process.run('stty', [
