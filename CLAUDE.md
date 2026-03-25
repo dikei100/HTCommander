@@ -4,64 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-HTCommander is a ham radio controller for Bluetooth-enabled handhelds (UV-Pro, UV-50Pro, GA-5WB, VR-N75, VR-N76, VR-N7500, VR-N7600, RT-660). **Active development is in the Flutter rewrite** (`htcommander_flutter/`). The C#/Avalonia app in the root is the stable reference implementation.
+HTCommander-X is a ham radio controller for Bluetooth-enabled handhelds (UV-Pro, UV-50Pro, GA-5WB, VR-N75, VR-N76, VR-N7500, VR-N7600, RT-660). Built with Flutter, targeting Linux desktop, Windows, and Android.
 
 Two git remotes: `origin` (Ylianst/HTCommander upstream), `fork` (dikei100/HTCommander-X). Push to `fork` with `--tags` to trigger releases.
 
-## C#/Avalonia App (reference, stable)
+Uses "Signal Protocol" design system (dark base `#0c0e17`, cyan primary `#3cd7ff`, glassmorphism, Inter font). Stitch project "HTCommander-X: New UI" is the design reference. ~190 source files, ~53K LOC, 199 tests.
 
-### Build
-
-**.NET SDK 9.0** required. `dotnet build HTCommander.sln` / `dotnet run --project HTCommander.Desktop/HTCommander.Desktop.csproj`. No test projects. Versioning in `HTCommander.Desktop.csproj` `<Version>` property — must match git tag.
-
-### Architecture
-
-```
-HTCommander.Desktop (Avalonia UI) ──┐
-                                     ├──> HTCommander.Core (all business logic)
-HTCommander.Platform.Linux ──────────┤
-HTCommander.Platform.Windows ────────┘
-```
-
-**Core** (net9.0): Radio.cs (GAIA protocol), DataBroker pub/sub, AX.25/APRS, SBC codec, SSTV, VoiceHandler, RadioAudioManager, servers (MCP/Web/Rigctld/AGWPE/SMTP/IMAP), AudioClipHandler, RepeaterBookClient, AdifExport.
-
-**Key patterns**: DataBroker event flow (device 0=settings, 1=app events, 100+=radios), data handler self-registration, radio connection lifecycle (transport→OnConnected→GAIA init→DataBroker dispatch), IRadioHost interface for circular dependency breaking.
-
-**Linux Bluetooth**: Direct native RFCOMM sockets. `poll()`/`SO_RCVTIMEO` broken on RFCOMM — use `O_NONBLOCK` + `Thread.Sleep(50)`. `OnConnected` must fire on background thread. RFCOMM channels vary by model (VR-N76: ch 1 or 4 for commands, ch 2 for audio). Block SIGPROF around syscalls.
-
-### GAIA Protocol
-
-```
-[0xFF] [0x01] [flags] [body_length] [group_hi] [group_lo] [cmd_hi] [cmd_lo] [body...]
-```
-- `body_length` = cmd body only (max 255), total frame = body_length + 8
-- Reply bit: `cmd_hi | 0x80`. Frequencies stored in Hz.
-- SBC codec: 32kHz, 16 blocks, mono, loudness allocation, 8 subbands, bitpool 18
-- Audio framing: `0x7E` start/end, `0x7D` escape (XOR `0x20`). Separate RFCOMM channel (GenericAudio UUID `00001203`).
-
-### Code Conventions
-
-- net9.0, nullable disabled, implicit usings disabled, unsafe blocks enabled
-- Radio state dispatched as **string** (e.g. `"Connected"`)
-- Settings: int 0/1 for booleans, `DataBroker.GetValue<int>(0, key, 0) == 1`
-- Avalonia: `ComboBox` has no `.Text` — use `AutoCompleteBox`. Dialogs use `Confirmed` bool pattern.
-- SSTV uses SkiaSharp, not System.Drawing
-
-### Security Summary
-
-All servers default to loopback. MCP requires Bearer token when `ServerBindAll` enabled. All subprocess calls use `ArgumentList` (no injection). Path traversal validated via `GetFullPath()` prefix check. Protocol bounds checked on all constructors. Error responses never expose `ex.Message`. Files chmod 600 on Linux. CSP on web pages. Constant-time auth comparisons throughout.
-
----
-
-## HTCommander-X Flutter Rewrite (`htcommander_flutter/`)
-
-Full Dart/Flutter rewrite targeting Linux desktop, Windows, and Android. Uses "Signal Protocol" design system (dark base `#0c0e17`, cyan primary `#3cd7ff`, glassmorphism, Inter font). Stitch project "HTCommander-X: New UI" is the design reference. ~190 source files, ~53K LOC, 199 tests.
-
-### Prerequisites
+## Prerequisites
 
 **Flutter SDK** (stable, v3.41.5+) at `~/flutter`. Add to PATH: `export PATH="$HOME/flutter/bin:$PATH"`. Linux: `sudo pacman -S ninja gcc`.
 
-### Build Commands
+## Build Commands
 
 ```bash
 cd htcommander_flutter
@@ -78,7 +31,7 @@ cd htcommander_flutter
 
 Note: Flutter SDK is at `~/flutter/bin/flutter` (not on PATH by default).
 
-### Architecture
+## Architecture
 
 **Startup**: `WidgetsFlutterBinding.ensureInitialized()` → `SharedPrefsSettingsStore.create()` → `DataBroker.initialize(store)` → `initializeDataHandlers()` → `initializeHandlerPaths(appDataPath)` → `runApp()`.
 
@@ -102,7 +55,17 @@ Note: Flutter SDK is at `~/flutter/bin/flutter` (not on PATH by default).
 - `screens/` — 12 screens wired to DataBroker. Communication screen loads current state on init. Screens use 42px inline header bars (not 46px).
 - `widgets/` — VfoDisplay, PttButton, SignalBars, RadioStatusCard, GlassCard, SidebarNav, StatusStrip
 
-### DataBroker Pattern (Same as C#)
+### GAIA Protocol
+
+```
+[0xFF] [0x01] [flags] [body_length] [group_hi] [group_lo] [cmd_hi] [cmd_lo] [body...]
+```
+- `body_length` = cmd body only (max 255), total frame = body_length + 8
+- Reply bit: `cmd_hi | 0x80`. Frequencies stored in Hz.
+- SBC codec: 32kHz, 16 blocks, mono, loudness allocation, 8 subbands, bitpool 18
+- Audio framing: `0x7E` start/end, `0x7D` escape (XOR `0x20`). Separate RFCOMM channel (GenericAudio UUID `00001203`).
+
+### DataBroker Pattern
 
 `DataBroker.dispatch(deviceId, name, data)` / `broker.subscribe(deviceId, name, callback)`. Device 0 = settings (auto-persisted), device 1 = app events, device 100+ = radios. Screens subscribe in `initState()`, call `setState()` in callbacks. Handlers self-initialize in constructors.
 
@@ -147,18 +110,12 @@ Platform-specific services injected in `app_init.dart`: Linux gets `LinuxSpeechS
 
 - Import `radio/radio.dart` with `as ht` prefix (avoids Flutter `Radio` widget clash)
 - Dart `int` is 64-bit — use `& 0xFFFFFFFF` for unsigned 32-bit
-- C# `byte[]` → `Uint8List`, `short[]` → `Int16List`
-- C# `SynchronizationContext.Post()` → `Future.microtask()`
-- C# `volatile`/`lock` → Dart main isolate is single-threaded; use `Completer` for async
-- C# `Thread` → Dart `Isolate` (RFCOMM) or `async`/`await`
 - Settings: int 0/1 for booleans: `DataBroker.getValue<int>(0, key, 0) == 1`
 
 ## Repository Structure
 
-- `HTCommander.Core/`, `HTCommander.Platform.Linux/`, `HTCommander.Platform.Windows/`, `HTCommander.Desktop/` — C#/Avalonia app
-- `htcommander_flutter/` — Flutter rewrite (active development)
-- `docs/` — architecture docs
-- `packaging/linux/` — AppImage/deb build scripts
+- `htcommander_flutter/` — Flutter app (active development)
+- `docs/` — feature & protocol documentation
 - `web/` — embedded web interface (desktop Web Bluetooth + mobile SPA)
 - `assets/` — shared icons
 - `.github/workflows/release.yml` — CI/CD (version tags trigger builds)
