@@ -47,8 +47,8 @@ class _MailClientDebugDialogState extends State<MailClientDebugDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 560, height: 400,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 560, maxHeight: 400),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(

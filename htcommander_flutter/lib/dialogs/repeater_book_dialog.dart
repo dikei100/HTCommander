@@ -57,8 +57,8 @@ class _RepeaterBookDialogState extends State<RepeaterBookDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 640, height: 520,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 640, maxHeight: 520),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

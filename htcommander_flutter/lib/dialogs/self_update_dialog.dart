@@ -104,8 +104,8 @@ class _SelfUpdateDialogState extends State<SelfUpdateDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 400,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 400),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(

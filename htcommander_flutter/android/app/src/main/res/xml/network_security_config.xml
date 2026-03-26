@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Allow cleartext HTTP for user-configured local network services
+     (Dump1090 ADS-B receivers at arbitrary LAN IPs, RepeaterBook API).
+     Android's domain-config doesn't support IP ranges, and these services
+     use IPs not hostnames, so we must allow cleartext globally. The app
+     only connects to endpoints explicitly configured by the user. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

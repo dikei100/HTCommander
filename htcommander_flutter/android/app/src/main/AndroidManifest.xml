@@ -16,6 +16,15 @@
     <!-- Microphone for PTT -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
+    <!-- Foreground service to keep BT/audio alive in background -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+    <!-- Notification permission required for foreground service on API 33+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <!-- Network access for RepeaterBook, AirplaneHandler, etc. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <!-- Hardware feature declarations for Play Store filtering -->
     <uses-feature android:name="android.hardware.bluetooth" android:required="true"/>
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
@@ -23,7 +32,8 @@
     <application
         android:label="HTCommander-X"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -51,6 +61,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Foreground service for persistent BT/audio connections -->
+        <service
+            android:name=".ConnectionForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

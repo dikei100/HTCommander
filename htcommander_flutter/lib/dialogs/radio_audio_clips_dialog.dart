@@ -44,8 +44,8 @@ class _RadioAudioClipsDialogState extends State<RadioAudioClipsDialog> {
         return Dialog(
           backgroundColor: colors.surfaceContainerHigh,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          child: SizedBox(
-            width: 320,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: 320),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -138,8 +138,8 @@ class _RadioAudioClipsDialogState extends State<RadioAudioClipsDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 480,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 480),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(

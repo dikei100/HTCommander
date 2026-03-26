@@ -8,7 +8,9 @@ import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import kotlinx.coroutines.*
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Android TTS service using the platform TextToSpeech API.
@@ -24,10 +26,13 @@ class SpeechService(private val context: Context) :
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val ttsInitDeferred = CompletableDeferred<Boolean>()
 
     init {
         tts = TextToSpeech(context) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
+            ttsInitDeferred.complete(ttsReady)
             if (ttsReady) {
                 Log.i(TAG, "TTS initialized")
             } else {
@@ -38,7 +43,14 @@ class SpeechService(private val context: Context) :
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "isAvailable" -> result.success(ttsReady)
+            "isAvailable" -> {
+                // Wait up to 3s for TTS init to complete so early calls
+                // don't return a premature false
+                scope.launch {
+                    val ready = withTimeoutOrNull(3000) { ttsInitDeferred.await() } ?: false
+                    result.success(ready)
+                }
+            }
             "getVoices" -> getVoices(result)
             "selectVoice" -> {
                 val voice = call.argument<String>("voice")
@@ -64,6 +76,7 @@ class SpeechService(private val context: Context) :
             val voices = tts?.voices?.map { it.name } ?: emptyList()
             result.success(voices)
         } catch (e: Exception) {
+            Log.e(TAG, "Failed to get voices: ${e.message}")
             result.success(emptyList<String>())
         }
     }
@@ -93,13 +106,13 @@ class SpeechService(private val context: Context) :
         try {
             val tempFile = File.createTempFile("tts_", ".wav", context.cacheDir)
             val utteranceId = "htcommander_${System.currentTimeMillis()}"
+            // Guard against double-completion if both onDone and onError fire
+            val responded = AtomicBoolean(false)
 
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(id: String?) {}
                 override fun onError(id: String?) {
-                    if (id == utteranceId) {
-                        // UtteranceProgressListener runs on TTS thread —
-                        // MethodChannel.Result must be called on main thread
+                    if (id == utteranceId && responded.compareAndSet(false, true)) {
                         mainHandler.post {
                             result.error("TTS_ERROR", "Synthesis failed", null)
                         }
@@ -107,7 +120,7 @@ class SpeechService(private val context: Context) :
                     }
                 }
                 override fun onDone(id: String?) {
-                    if (id == utteranceId) {
+                    if (id == utteranceId && responded.compareAndSet(false, true)) {
                         mainHandler.post {
                             try {
                                 val bytes = tempFile.readBytes()
@@ -129,6 +142,7 @@ class SpeechService(private val context: Context) :
     }
 
     fun dispose() {
+        scope.cancel()
         tts?.stop()
         tts?.shutdown()
         tts = null

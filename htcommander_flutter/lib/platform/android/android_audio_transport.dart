@@ -15,6 +15,7 @@ class AndroidRadioAudioTransport extends RadioAudioTransport {
       MethodChannel('com.htcommander/audio_transport');
   static const _eventChannel =
       EventChannel('com.htcommander/audio_transport_events');
+  static const _btChannel = MethodChannel('com.htcommander/bluetooth');
 
   bool _connected = false;
   bool _disposed = false;
@@ -60,7 +61,12 @@ class AndroidRadioAudioTransport extends RadioAudioTransport {
         macAddress.replaceAll(':', '').replaceAll('-', '').toUpperCase();
 
     try {
-      await _methodChannel.invokeMethod<void>('connect', {'mac': mac});
+      // Query the command channel's RFCOMM channel number so the audio
+      // transport can skip it during channel probing
+      final skipChannel =
+          await _btChannel.invokeMethod<int>('getConnectedChannel') ?? -1;
+      await _methodChannel.invokeMethod<void>(
+          'connect', {'mac': mac, 'skipChannel': skipChannel});
       _connected = true;
     } on PlatformException catch (e) {
       _eventSub?.cancel();
@@ -79,16 +85,25 @@ class AndroidRadioAudioTransport extends RadioAudioTransport {
 
   @override
   Future<Uint8List?> read(int maxBytes) async {
-    if (_disposed || !_connected) return null;
-    try {
-      return await _readBuffer.stream.first;
-    } on StateError {
-      // Stream was closed
-      _connected = false;
-      return null;
-    } catch (_) {
-      return null;
+    // Loop instead of recursion to avoid stack overflow under sustained
+    // timeout conditions
+    while (!_disposed && _connected) {
+      try {
+        return await _readBuffer.stream.first.timeout(
+          const Duration(seconds: 5),
+        );
+      } on StateError {
+        // Stream was closed
+        _connected = false;
+        return null;
+      } on TimeoutException {
+        // No data within timeout — loop back if still active
+        continue;
+      } catch (_) {
+        return null;
+      }
     }
+    return null;
   }
 
   @override
@@ -96,8 +111,9 @@ class AndroidRadioAudioTransport extends RadioAudioTransport {
     if (_disposed || !_connected) return;
     try {
       await _methodChannel.invokeMethod<void>('write', {'data': data});
-    } on PlatformException {
-      // Write failed — connection may be lost
+    } on PlatformException catch (e) {
+      _log('Audio transport write failed: ${e.message}');
+      _connected = false;
     }
   }
 

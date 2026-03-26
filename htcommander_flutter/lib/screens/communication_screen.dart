@@ -377,25 +377,27 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final isWide = MediaQuery.sizeOf(context).width > 800;
 
+    if (isWide) return _buildDesktopLayout(colors);
+    return _buildMobileLayout(colors);
+  }
+
+  Widget _buildDesktopLayout(ColorScheme colors) {
     return Column(
       children: [
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Left: Control panel
               SizedBox(
                 width: 320,
                 child: _buildControlPanel(colors),
               ),
-              // Right: Content area
               Expanded(
                 child: Column(
                   children: [
-                    // Quick controls bar
                     _buildQuickControls(colors),
-                    // Two-column content
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
@@ -409,7 +411,6 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
                         ),
                       ),
                     ),
-                    // Input bar
                     _buildInputBar(colors),
                   ],
                 ),
@@ -417,8 +418,108 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
             ],
           ),
         ),
-        // Status strip at very bottom
         StatusStrip(isConnected: _isConnected),
+      ],
+    );
+  }
+
+  Widget _buildMobileLayout(ColorScheme colors) {
+    return Column(
+      children: [
+        // Compact VFO + signal section
+        Container(
+          padding: const EdgeInsets.all(12),
+          color: colors.surfaceContainerLow,
+          child: Column(
+            children: [
+              VfoDisplay(
+                label: 'VFO A',
+                frequency: _vfoAFreq,
+                channelName: _vfoAName,
+                modulation: 'FM',
+                isActive: true,
+                isPrimary: true,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _MiniStatus(
+                    label: 'RSSI',
+                    child: SignalBars(level: _rssi, height: 14),
+                  ),
+                  const SizedBox(width: 12),
+                  if (_rssi > 0)
+                    Text(
+                      '${-113 + _rssi} dBm',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: colors.onSurfaceVariant,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  const Spacer(),
+                  PttButton(
+                    size: 56,
+                    isEnabled: _isConnected,
+                    isTransmitting: _isTransmitting,
+                    showLabel: false,
+                    onPttStart: _onPttStart,
+                    onPttStop: _onPttStop,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        // Quick controls (simplified)
+        Container(
+          height: 36,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          color: colors.surfaceContainer,
+          child: Row(
+            children: [
+              Text(
+                'COMM HUB',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: colors.onSurface,
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _isConnected ? 'Connected' : 'Idle',
+                style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
+              ),
+              const Spacer(),
+              Container(
+                height: 26,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: DropdownButton<String>(
+                  value: _selectedMode,
+                  underline: const SizedBox(),
+                  isDense: true,
+                  dropdownColor: colors.surfaceContainerHigh,
+                  style: TextStyle(fontSize: 11, color: colors.onSurface),
+                  items: ['Chat', 'Speak', 'Morse', 'DTMF']
+                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _selectedMode = v!),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Message feed
+        Expanded(child: _buildOperationLog(colors)),
+        // Input bar
+        _buildInputBar(colors),
       ],
     );
   }
@@ -922,7 +1023,7 @@ class _CommunicationScreenState extends State<CommunicationScreen> {
   void _sendMessage() {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
-    _broker.dispatch(1, 'Chat', text, store: false);
+    _broker.dispatch(1, _selectedMode, text, store: false);
     setState(() {
       _messages.add(_ChatMessage(text: text, outgoing: true));
       _inputController.clear();

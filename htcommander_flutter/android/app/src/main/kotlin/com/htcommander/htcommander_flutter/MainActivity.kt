@@ -42,7 +42,7 @@ class MainActivity : FlutterActivity() {
             .setStreamHandler(audioTransportService)
 
         // Audio playback/capture
-        audioService = AudioService()
+        audioService = AudioService(this)
         MethodChannel(messenger, "com.htcommander/audio")
             .setMethodCallHandler(audioService)
         EventChannel(messenger, "com.htcommander/mic_events")
@@ -86,12 +86,39 @@ class MainActivity : FlutterActivity() {
             needed.add(Manifest.permission.RECORD_AUDIO)
         }
 
+        // Notification permission for foreground service (API 33+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                needed.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
         if (needed.isNotEmpty()) {
             ActivityCompat.requestPermissions(
                 this,
                 needed.toTypedArray(),
                 PERMISSION_REQUEST_CODE
             )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != PERMISSION_REQUEST_CODE) return
+
+        val denied = permissions.zip(grantResults.toTypedArray())
+            .filter { it.second != PackageManager.PERMISSION_GRANTED }
+            .map { it.first }
+
+        if (denied.isNotEmpty()) {
+            // Notify Dart side so the UI can show a permissions dialog
+            flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
+                MethodChannel(messenger, "com.htcommander/bluetooth")
+                    .invokeMethod("permissionsDenied", denied)
+            }
         }
     }
 

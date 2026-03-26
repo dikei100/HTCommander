@@ -202,6 +202,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final isWide = MediaQuery.sizeOf(context).width > 800;
 
     return Column(
       children: [
@@ -212,16 +213,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Row(
             children: [
               const SizedBox(width: 14),
-              Text(
-                'SYSTEM PARAMETERS',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1,
-                  color: colors.onSurface,
+              if (isWide) ...[
+                Text(
+                  'SYSTEM PARAMETERS',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                    color: colors.onSurface,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 20),
+                const SizedBox(width: 20),
+              ],
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -281,8 +284,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildContentPanel(ColorScheme colors) {
+    final isWide = MediaQuery.sizeOf(context).width > 800;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(isWide ? 14 : 12),
       child: _buildCategoryContent(colors),
     );
   }

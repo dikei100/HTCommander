@@ -62,8 +62,8 @@ class _AprsConfigDialogState extends State<AprsConfigDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 400,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 400),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -82,14 +82,14 @@ class _AprsConfigDialogState extends State<AprsConfigDialog> {
                     child:
                         _buildField('CALLSIGN', _callsignController, colors)),
                 const SizedBox(width: 12),
-                SizedBox(
-                    width: 80,
+                ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 60, maxWidth: 80),
                     child: _buildField('SSID', _ssidController, colors)),
               ]),
               const SizedBox(height: 12),
               Row(children: [
-                SizedBox(
-                    width: 140,
+                ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 80, maxWidth: 140),
                     child: _buildField(
                         'BEACON INTERVAL (s)', _beaconIntervalController,
                         colors)),

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Dialog for playing back a recorded WAV audio file.
 class RecordingPlaybackDialog extends StatefulWidget {
@@ -60,8 +61,26 @@ class _RecordingPlaybackDialogState extends State<RecordingPlaybackDialog> {
           '-Command',
           '(New-Object Media.SoundPlayer "${widget.filePath}").PlaySync()',
         ]);
+      } else if (Platform.isAndroid) {
+        // Use platform AudioTrack via MethodChannel
+        const channel = MethodChannel('com.htcommander/audio');
+        final bytes = await File(widget.filePath).readAsBytes();
+        await channel.invokeMethod<void>('startPlayback');
+        await channel.invokeMethod<void>('writePcm', {'data': bytes});
+        // Wait briefly for playback to drain, then signal completion
+        final durationMs = (bytes.length / 2 / 32000 * 1000).round();
+        await Future.delayed(Duration(milliseconds: durationMs + 200));
+        await channel.invokeMethod<void>('stopPlayback');
+        if (mounted) {
+          setState(() {
+            _isPlaying = false;
+            _progress = 1.0;
+            _statusText = 'Playback complete';
+          });
+        }
+        return;
       } else {
-        // Android / other — not yet supported via subprocess
+        // Other — not yet supported
         if (mounted) {
           setState(() {
             _isPlaying = false;
@@ -110,8 +129,8 @@ class _RecordingPlaybackDialogState extends State<RecordingPlaybackDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 400,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 400),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(

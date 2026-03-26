@@ -6,6 +6,7 @@ import '../core/data_broker.dart';
 import '../core/data_broker_client.dart';
 import '../platform/speech_service.dart';
 import '../platform/whisper_engine.dart';
+import '../radio/dtmf_engine.dart';
 import '../radio/morse_engine.dart';
 import '../radio/sstv/sstv_monitor.dart';
 import '../radio/wav_file_writer.dart';
@@ -61,10 +62,11 @@ class VoiceHandler {
     _broker.subscribe(1, 'VoiceHandlerEnable', _onVoiceHandlerEnable);
     _broker.subscribe(1, 'VoiceHandlerDisable', _onVoiceHandlerDisable);
 
-    // Subscribe to Chat, Speak, Morse from all devices
+    // Subscribe to Chat, Speak, Morse, DTMF from all devices
     _broker.subscribe(DataBroker.allDevices, 'Chat', _onChat);
     _broker.subscribe(DataBroker.allDevices, 'Speak', _onSpeak);
     _broker.subscribe(DataBroker.allDevices, 'Morse', _onMorse);
+    _broker.subscribe(DataBroker.allDevices, 'DTMF', _onDtmf);
 
     // Subscribe to audio data for SSTV monitoring
     _broker.subscribe(
@@ -311,6 +313,56 @@ class VoiceHandler {
           'to device $transmitDeviceId');
     } catch (e) {
       _broker.logError('[VoiceHandler] Error generating morse code: $e');
+    }
+  }
+
+  /// Handles DTMF command — generates DTMF tones and dispatches for
+  /// radio transmission.
+  void _onDtmf(int deviceId, String name, Object? data) {
+    if (_disposed || data == null) return;
+
+    final digits = data is String ? data : null;
+    if (digits == null || digits.isEmpty) return;
+
+    final transmitDeviceId = _resolveTransmitDevice(deviceId);
+    if (transmitDeviceId == null) {
+      _broker.logError(
+          '[VoiceHandler] Cannot send DTMF: No radio is voice-enabled');
+      return;
+    }
+
+    try {
+      _broker.logInfo(
+          '[VoiceHandler] Generating DTMF on device $transmitDeviceId: '
+          '$digits');
+
+      // Generate DTMF PCM (8-bit unsigned, 32kHz)
+      final dtmfPcm8bit = DtmfEngine.generateDtmfPcm(digits);
+
+      if (dtmfPcm8bit.isEmpty) {
+        _broker.logError('[VoiceHandler] Failed to generate DTMF PCM');
+        return;
+      }
+
+      // Convert 8-bit unsigned PCM to 16-bit signed PCM
+      final pcmData = Uint8List(dtmfPcm8bit.length * 2);
+      for (int i = 0; i < dtmfPcm8bit.length; i++) {
+        final int sample16 = ((dtmfPcm8bit[i] - 128) * 256);
+        pcmData[i * 2] = sample16 & 0xFF;
+        pcmData[i * 2 + 1] = (sample16 >> 8) & 0xFF;
+      }
+
+      // Send PCM data to the radio for transmission
+      _broker.dispatch(
+          transmitDeviceId,
+          'TransmitVoicePCM',
+          <String, Object>{'Data': pcmData, 'PlayLocally': true},
+          store: false);
+      _broker.logInfo(
+          '[VoiceHandler] Transmitted ${pcmData.length} bytes of DTMF PCM '
+          'to device $transmitDeviceId');
+    } catch (e) {
+      _broker.logError('[VoiceHandler] Error generating DTMF: $e');
     }
   }
 

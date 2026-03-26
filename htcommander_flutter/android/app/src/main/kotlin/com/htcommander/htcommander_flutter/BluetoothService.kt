@@ -6,7 +6,10 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothSocket
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -44,8 +47,12 @@ class BluetoothService(private val context: Context) :
     @Volatile private var socket: BluetoothSocket? = null
     @Volatile private var inputStream: InputStream? = null
     @Volatile private var outputStream: OutputStream? = null
-    private var readJob: Job? = null
+    @Volatile private var readJob: Job? = null
     @Volatile private var eventSink: EventChannel.EventSink? = null
+
+    /// RFCOMM channel number used for the command connection, or -1 if unknown
+    /// (UUID-based connection). Exposed so AudioTransportService can skip it.
+    @Volatile var connectedChannel: Int = -1
 
     private val adapter: BluetoothAdapter? by lazy {
         val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -76,6 +83,28 @@ class BluetoothService(private val context: Context) :
                 } else {
                     write(data, result)
                 }
+            }
+            "getConnectedChannel" -> result.success(connectedChannel)
+            "startForegroundService" -> {
+                val intent = Intent(context, ConnectionForegroundService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+                result.success(null)
+            }
+            "stopForegroundService" -> {
+                context.stopService(Intent(context, ConnectionForegroundService::class.java))
+                result.success(null)
+            }
+            "openAppSettings" -> {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", context.packageName, null)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                result.success(null)
             }
             else -> result.notImplemented()
         }
@@ -115,9 +144,11 @@ class BluetoothService(private val context: Context) :
 
     @SuppressLint("MissingPermission")
     private fun connect(mac: String, result: MethodChannel.Result) {
-        // Guard against double-connect
+        // Guard against double-connect — wait for read loop to finish
         if (socket != null) {
+            val oldJob = readJob
             disconnect()
+            runBlocking { oldJob?.join() }
         }
 
         val bt = adapter
@@ -193,10 +224,13 @@ class BluetoothService(private val context: Context) :
 
     @SuppressLint("MissingPermission")
     private fun tryConnectWithUuid(device: BluetoothDevice): BluetoothSocket? {
+        connectedChannel = -1
         return try {
             val sock = device.createRfcommSocketToServiceRecord(SPP_UUID)
             sock.connect()
             sendLog("Connected via SPP UUID")
+            // UUID-based connection — channel number is unknown, leave at -1
+            // so audio transport won't incorrectly skip a probed channel
             sock
         } catch (e: IOException) {
             Log.d(TAG, "SPP UUID connection failed: ${e.message}")
@@ -206,6 +240,7 @@ class BluetoothService(private val context: Context) :
 
     @SuppressLint("MissingPermission")
     private fun probeChannels(device: BluetoothDevice): BluetoothSocket? {
+        connectedChannel = -1
         for (channel in 1..30) {
             try {
                 val sock = device.javaClass
@@ -213,6 +248,7 @@ class BluetoothService(private val context: Context) :
                     .invoke(device, channel) as BluetoothSocket
                 sock.connect()
                 sendLog("Connected on RFCOMM channel $channel")
+                connectedChannel = channel
                 return sock
             } catch (e: Exception) {
                 Log.v(TAG, "Channel $channel failed: ${e.message}")
@@ -228,9 +264,25 @@ class BluetoothService(private val context: Context) :
             val buffer = ByteArray(4096)
             try {
                 while (isActive) {
+                    // Capture volatile fields into local vals to avoid race
+                    // conditions if disconnect() nulls them between checks
                     val stream = inputStream ?: break
+                    val sock = socket ?: break
+                    if (!sock.isConnected) break
+
+                    // Non-blocking check for available data. Some Android BT
+                    // stacks throw IOException here when the remote disconnects,
+                    // which is exactly what we want — it breaks out promptly
+                    // instead of hanging forever on a blocking read().
+                    val avail = try { stream.available() } catch (_: IOException) { -1 }
+                    if (avail < 0) break
+                    if (avail == 0) {
+                        delay(10) // yield, avoid busy-wait
+                        continue
+                    }
+
                     val bytesRead = try {
-                        stream.read(buffer)
+                        stream.read(buffer, 0, minOf(avail, buffer.size))
                     } catch (e: IOException) {
                         Log.d(TAG, "Read error: ${e.message}")
                         -1
@@ -239,7 +291,7 @@ class BluetoothService(private val context: Context) :
 
                     val data = buffer.copyOf(bytesRead)
                     withContext(Dispatchers.Main) {
-                        sendEvent(mapOf("event" to "data", "payload" to data))
+                        eventSink?.success(mapOf("event" to "data", "payload" to data))
                     }
                 }
             } catch (e: Exception) {
@@ -268,7 +320,8 @@ class BluetoothService(private val context: Context) :
                 stream.write(data)
                 stream.flush()
                 withContext(Dispatchers.Main) { result.success(null) }
-            } catch (e: IOException) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 withContext(Dispatchers.Main) {
                     result.error("WRITE_FAILED", e.message, null)
                 }
@@ -279,8 +332,10 @@ class BluetoothService(private val context: Context) :
     // ── Disconnect ──────────────────────────────────────────────────────
 
     fun disconnect() {
-        readJob?.cancel()
+        val job = readJob
         readJob = null
+        connectedChannel = -1
+        job?.cancel()
         closeSocket()
     }
 

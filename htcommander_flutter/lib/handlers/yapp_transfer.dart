@@ -232,6 +232,12 @@ class YappTransfer {
   // --- Private methods ---
 
   String _getDefaultDownloadPath() {
+    if (Platform.isAndroid) {
+      // On Android, HOME/USERPROFILE env vars are unreliable.
+      // Use the system temp directory as a safe fallback — files are
+      // delivered to the user via onComplete callback regardless.
+      return '${Directory.systemTemp.path}/HTCommander Downloads';
+    }
     final home = Platform.environment['HOME'] ??
         Platform.environment['USERPROFILE'] ??
         '.';

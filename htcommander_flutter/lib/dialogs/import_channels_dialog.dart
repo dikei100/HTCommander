@@ -14,8 +14,8 @@ class ImportChannelsDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 560, height: 460,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 560, maxHeight: 460),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

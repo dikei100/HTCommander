@@ -35,7 +35,7 @@ class AudioTransportService(private val context: Context) :
     @Volatile private var socket: BluetoothSocket? = null
     @Volatile private var inputStream: InputStream? = null
     @Volatile private var outputStream: OutputStream? = null
-    private var readJob: Job? = null
+    @Volatile private var readJob: Job? = null
     @Volatile private var eventSink: EventChannel.EventSink? = null
 
     private val adapter: BluetoothAdapter? by lazy {
@@ -49,10 +49,11 @@ class AudioTransportService(private val context: Context) :
         when (call.method) {
             "connect" -> {
                 val mac = call.argument<String>("mac")
+                val skipChannel = call.argument<Int>("skipChannel") ?: -1
                 if (mac == null) {
                     result.error("INVALID_ARG", "Missing 'mac' argument", null)
                 } else {
-                    connect(mac, result)
+                    connect(mac, skipChannel, result)
                 }
             }
             "disconnect" -> {
@@ -84,10 +85,12 @@ class AudioTransportService(private val context: Context) :
     // ── Connection ──────────────────────────────────────────────────────
 
     @SuppressLint("MissingPermission")
-    private fun connect(mac: String, result: MethodChannel.Result) {
-        // Guard against double-connect
+    private fun connect(mac: String, skipChannel: Int, result: MethodChannel.Result) {
+        // Guard against double-connect — wait for old read loop to finish
         if (socket != null) {
+            val oldJob = readJob
             disconnect()
+            runBlocking { oldJob?.join() }
         }
 
         val bt = adapter
@@ -127,7 +130,7 @@ class AudioTransportService(private val context: Context) :
                     // Fallback: probe channels (skip the command channel)
                     if (sock == null) {
                         Log.i(TAG, "Probing audio channels 1-30...")
-                        sock = probeChannels(device)
+                        sock = probeChannels(device, skipChannel)
                     }
 
                     if (sock == null) {
@@ -171,8 +174,9 @@ class AudioTransportService(private val context: Context) :
     }
 
     @SuppressLint("MissingPermission")
-    private fun probeChannels(device: android.bluetooth.BluetoothDevice): BluetoothSocket? {
+    private fun probeChannels(device: android.bluetooth.BluetoothDevice, skipChannel: Int = -1): BluetoothSocket? {
         for (channel in 1..30) {
+            if (channel == skipChannel) continue
             try {
                 val sock = device.javaClass
                     .getMethod("createRfcommSocket", Int::class.java)
@@ -194,9 +198,23 @@ class AudioTransportService(private val context: Context) :
             val buffer = ByteArray(4096)
             try {
                 while (isActive) {
+                    // Capture volatile fields into local vals to avoid race
+                    // conditions if disconnect() nulls them between checks
                     val stream = inputStream ?: break
+                    val sock = socket ?: break
+                    if (!sock.isConnected) break
+
+                    // Non-blocking check — breaks promptly on remote disconnect
+                    // instead of hanging forever on blocking read()
+                    val avail = try { stream.available() } catch (_: IOException) { -1 }
+                    if (avail < 0) break
+                    if (avail == 0) {
+                        delay(10)
+                        continue
+                    }
+
                     val bytesRead = try {
-                        stream.read(buffer)
+                        stream.read(buffer, 0, minOf(avail, buffer.size))
                     } catch (e: IOException) {
                         Log.d(TAG, "Audio read error: ${e.message}")
                         -1
@@ -205,7 +223,6 @@ class AudioTransportService(private val context: Context) :
 
                     val data = buffer.copyOf(bytesRead)
                     withContext(Dispatchers.Main) {
-                        // Send raw audio bytes directly (not wrapped in a map)
                         eventSink?.success(data)
                     }
                 }
@@ -234,7 +251,8 @@ class AudioTransportService(private val context: Context) :
                 stream.write(data)
                 stream.flush()
                 withContext(Dispatchers.Main) { result.success(null) }
-            } catch (e: IOException) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 withContext(Dispatchers.Main) {
                     result.error("WRITE_FAILED", e.message, null)
                 }

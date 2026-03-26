@@ -246,6 +246,9 @@ class Radio {
   // Clear channel timer
   Timer? _clearChannelTimer;
 
+  // Audio auto-start timer — cancelled on disconnect to prevent stale callback
+  Timer? _audioAutoStartTimer;
+
   bool get _packetTrace =>
       DataBroker.getValue<bool>(0, 'BluetoothFramesDebug', false);
   bool get _loopbackMode =>
@@ -331,6 +334,8 @@ class Radio {
     _lockState = null;
     _gpsEnabled = false;
     _clearChannelTimer?.cancel();
+    _audioAutoStartTimer?.cancel();
+    _audioAutoStartTimer = null;
 
     DataBroker.deleteDevice(deviceId);
   }
@@ -349,7 +354,9 @@ class Radio {
     _requestPowerStatus(_PowerStatus.batteryAsPercentage);
 
     // Auto-start audio pipeline after connection settles
-    Future.delayed(const Duration(seconds: 3), () {
+    _audioAutoStartTimer?.cancel();
+    _audioAutoStartTimer = Timer(const Duration(seconds: 3), () {
+      _audioAutoStartTimer = null;
       if (_state == RadioState.connected) {
         _setAudioEnabled(true);
       }

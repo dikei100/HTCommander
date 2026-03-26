@@ -155,42 +155,81 @@ class _AprsScreenState extends State<AprsScreen> {
       fontWeight: FontWeight.w600,
       letterSpacing: 1.5,
     );
+    final isWide = MediaQuery.sizeOf(context).width > 800;
 
+    if (isWide) {
+      return Column(
+        children: [
+          if (_showWarning) _buildWarningBanner(colors),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // --- Left column (flex 3) ---
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      children: [
+                        // Frequency monitor panel
+                        _buildFrequencyPanel(colors, sectionStyle),
+                        const SizedBox(height: 10),
+                        // Live APRS Feed
+                        Expanded(
+                          child: _buildFeedPanel(colors, sectionStyle),
+                        ),
+                        const SizedBox(height: 10),
+                        // Transmit bar
+                        _buildTransmitBar(colors),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // --- Right column (flex 2): Map placeholder ---
+                  Expanded(
+                    flex: 2,
+                    child: _buildMapPlaceholder(colors, sectionStyle),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          StatusStrip(
+            isConnected: _entries.isNotEmpty,
+            encoding: 'AX.25 / APRS',
+            extraItems: [
+              StatusStripItem(text: '$_activeStations STATIONS'),
+              StatusStripItem(text: '${_entries.length} PACKETS'),
+            ],
+          ),
+        ],
+      );
+    }
+
+    // Mobile: vertical stack
     return Column(
       children: [
         if (_showWarning) _buildWarningBanner(colors),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+          child: _buildFrequencyPanel(colors, sectionStyle),
+        ),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // --- Left column (flex 3) ---
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    children: [
-                      // Frequency monitor panel
-                      _buildFrequencyPanel(colors, sectionStyle),
-                      const SizedBox(height: 10),
-                      // Live APRS Feed
-                      Expanded(
-                        child: _buildFeedPanel(colors, sectionStyle),
-                      ),
-                      const SizedBox(height: 10),
-                      // Transmit bar
-                      _buildTransmitBar(colors),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                // --- Right column (flex 2): Map placeholder ---
-                Expanded(
-                  flex: 2,
-                  child: _buildMapPlaceholder(colors, sectionStyle),
-                ),
-              ],
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: _buildFeedPanel(colors, sectionStyle),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: _buildTransmitBar(colors),
+        ),
+        SizedBox(
+          height: 200,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+            child: _buildMapPlaceholder(colors, sectionStyle),
           ),
         ),
         StatusStrip(

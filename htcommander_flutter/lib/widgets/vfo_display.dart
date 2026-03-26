@@ -58,11 +58,14 @@ class VfoDisplay extends StatelessWidget {
               ),
               const Spacer(),
               if (channelName != null && channelName!.isNotEmpty)
-                Text(
-                  channelName!,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: colors.onSurfaceVariant,
+                Flexible(
+                  child: Text(
+                    channelName!,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
             ],

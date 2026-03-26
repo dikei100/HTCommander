@@ -61,14 +61,14 @@ class _PttButtonState extends State<PttButton> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: isActive
-                  ? const Color(0xFFC62828)
+                  ? colors.error
                   : widget.isEnabled
                       ? colors.primary
                       : colors.surfaceContainerHighest,
               boxShadow: isActive
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFC62828).withAlpha(100),
+                        color: colors.error.withAlpha(100),
                         blurRadius: 20,
                         spreadRadius: 4,
                       ),

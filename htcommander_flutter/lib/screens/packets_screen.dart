@@ -72,52 +72,86 @@ class _PacketsScreenState extends State<PacketsScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final isWide = MediaQuery.sizeOf(context).width > 800;
 
-    return Column(
-      children: [
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Left: AX.25 Packet Stream
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildStreamHeader(colors),
-                      const SizedBox(height: 10),
-                      Expanded(child: _buildPacketTable(colors)),
-                    ],
+    if (isWide) {
+      return Column(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Left: AX.25 Packet Stream
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildStreamHeader(colors),
+                        const SizedBox(height: 10),
+                        Expanded(child: _buildPacketTable(colors)),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 14),
-                // Right: Packet Decode
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'PACKET DECODE',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: colors.onSurfaceVariant,
-                          letterSpacing: 1.5,
+                  const SizedBox(width: 14),
+                  // Right: Packet Decode
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'PACKET DECODE',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: colors.onSurfaceVariant,
+                            letterSpacing: 1.5,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      Expanded(child: _buildDecodePanel(colors)),
-                    ],
+                        const SizedBox(height: 10),
+                        Expanded(child: _buildDecodePanel(colors)),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
+          StatusStrip(
+            isConnected: _packets.isNotEmpty,
+            encoding: 'AX.25',
+            extraItems: [
+              StatusStripItem(text: '${_packets.length} PACKETS'),
+            ],
+          ),
+        ],
+      );
+    }
+
+    // Mobile: vertical stack
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: _buildStreamHeader(colors),
         ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _buildPacketTable(colors),
+          ),
+        ),
+        if (_selectedIndex != null)
+          SizedBox(
+            height: 200,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _buildDecodePanel(colors),
+            ),
+          ),
         StatusStrip(
           isConnected: _packets.isNotEmpty,
           encoding: 'AX.25',

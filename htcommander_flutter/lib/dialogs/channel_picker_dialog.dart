@@ -22,9 +22,8 @@ class ChannelPickerDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 380,
-        height: 500,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 380, maxHeight: 500),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(

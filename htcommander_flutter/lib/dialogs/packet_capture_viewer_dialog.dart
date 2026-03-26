@@ -34,8 +34,8 @@ class PacketCaptureViewerDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 560,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 560),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(

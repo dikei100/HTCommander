@@ -43,11 +43,13 @@ class AndroidAudioOutput implements AudioOutput {
   @override
   void writePcmMono(Uint8List monoSamples) {
     if (!_running) return;
-    try {
-      _channel.invokeMethod<void>('writePcm', {'data': monoSamples});
-    } catch (e) {
+    // Fire-and-forget with proper async error handling via catchError,
+    // since the interface method is synchronous (void return).
+    _channel
+        .invokeMethod<void>('writePcm', {'data': monoSamples})
+        .catchError((Object e) {
       _log('Audio write error: $e');
-    }
+    });
   }
 
   @override
@@ -83,18 +85,33 @@ class AndroidMicCapture implements MicCapture {
     _radioDeviceId = radioDeviceId;
 
     try {
+      // Cancel any stale subscription from a previous start() call
+      _eventSub?.cancel();
+
       // Subscribe to mic data events from Kotlin
-      _eventSub = _eventChannel.receiveBroadcastStream().listen((event) {
-        if (!_running || event is! Uint8List) return;
+      _eventSub = _eventChannel.receiveBroadcastStream().listen(
+        (event) {
+          if (!_running || event is! Uint8List) return;
+          // Validate 16-bit PCM: must be non-empty and even length
+          if (event.isEmpty || event.length % 2 != 0) return;
 
-        // Resample 44100Hz -> 32000Hz
-        final pcm32k =
-            AudioResampler.resample16BitMono(event, 44100, 32000);
+          // Resample 44100Hz -> 32000Hz
+          final pcm32k =
+              AudioResampler.resample16BitMono(event, 44100, 32000);
 
-        // Dispatch to radio for SBC encoding and transmission
-        _broker.dispatch(_radioDeviceId, 'TransmitVoicePCM', pcm32k,
-            store: false);
-      });
+          // Dispatch to radio for SBC encoding and transmission
+          _broker.dispatch(_radioDeviceId, 'TransmitVoicePCM', pcm32k,
+              store: false);
+        },
+        onError: (Object error) {
+          _log('Mic event stream error: $error');
+          _running = false;
+        },
+        onDone: () {
+          _log('Mic event stream closed');
+          _running = false;
+        },
+      );
 
       await _channel.invokeMethod<void>('startCapture');
       _running = true;
@@ -102,6 +119,8 @@ class AndroidMicCapture implements MicCapture {
       _log('Mic capture started (AudioRecord, 44100Hz -> 32kHz)');
     } on PlatformException catch (e) {
       _log('Failed to start mic capture: ${e.message}');
+      _eventSub?.cancel();
+      _eventSub = null;
       _running = false;
     }
   }

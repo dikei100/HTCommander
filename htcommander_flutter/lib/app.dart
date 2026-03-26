@@ -1,5 +1,6 @@
 import 'dart:io' show Platform, Process;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'core/data_broker.dart';
 import 'core/data_broker_client.dart';
@@ -11,8 +12,10 @@ import 'platform/bluetooth_service.dart';
 import 'platform/linux/linux_platform_services.dart';
 import 'platform/windows/windows_platform_services.dart';
 import 'platform/android/android_platform_services.dart';
+import 'dialogs/bt_access_denied_dialog.dart';
 import 'theme/signal_protocol_theme.dart';
 import 'widgets/sidebar_nav.dart';
+import 'widgets/signal_bars.dart';
 import 'screens/communication_screen.dart';
 import 'screens/contacts_screen.dart';
 import 'screens/logbook_screen.dart';
@@ -167,6 +170,9 @@ class _AppShellState extends State<AppShell> {
     _broker.subscribe(1, 'McpDisconnectRadio', _onMcpDisconnect);
     _broker.subscribe(1, 'McpNavigateTo', _onMcpNavigate);
 
+    // Permission denial (Android)
+    _broker.subscribe(1, 'PermissionsDenied', _onPermissionsDenied);
+
     // Publish initial screen
     DataBroker.dispatch(1, 'CurrentScreen', 'communication');
   }
@@ -306,6 +312,21 @@ class _AppShellState extends State<AppShell> {
       });
       DataBroker.dispatch(1, 'CurrentScreen', screen);
     }
+  }
+
+  void _onPermissionsDenied(int deviceId, String name, Object? data) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => BtAccessDeniedDialog(
+        onOpenSettings: Platform.isAndroid ? _openAndroidAppSettings : null,
+      ),
+    );
+  }
+
+  void _openAndroidAppSettings() {
+    const channel = MethodChannel('com.htcommander/bluetooth');
+    channel.invokeMethod<void>('openAppSettings').catchError((_) {});
   }
 
   // ── Radio connection ───────────────────────────────────────────────
@@ -497,92 +518,222 @@ class _AppShellState extends State<AppShell> {
       );
     }
 
-    // Mobile layout
-    return Scaffold(
-      body: Column(
-        children: [
-          _buildMobileStatusBar(),
-          Expanded(child: _buildScreenArea()),
-        ],
+    // Mobile layout — compute which bottom nav item to highlight.
+    // When on a "more" screen (directScreenIndex != null), keep the last
+    // selected tab's highlight since NavigationBar requires a valid index.
+    final int mobileNavIndex;
+    if (_showSettings) {
+      mobileNavIndex = 4;
+    } else {
+      final idx = _mobileIndexMap.indexOf(_selectedSidebarIndex);
+      mobileNavIndex = idx >= 0 ? idx : 0;
+    }
+    return PopScope(
+      canPop: !_isConnected,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _isConnected) {
+          // Show confirmation before exiting while radio is connected
+          showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Disconnect?'),
+              content: const Text('Radio is still connected. Disconnect and exit?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('CANCEL'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(ctx, true);
+                    _onPowerTap();
+                  },
+                  child: const Text('DISCONNECT'),
+                ),
+              ],
+            ),
+          );
+        }
+      },
+      child: Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            _buildMobileHeader(),
+            Expanded(child: _buildScreenArea()),
+          ],
+        ),
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _showSettings
-            ? sidebarDestinations.length
-            : _selectedSidebarIndex.clamp(0, 4),
+        selectedIndex: mobileNavIndex,
         onDestinationSelected: (index) {
-          if (index < _mobileDestinations.length) {
+          if (index == 4) {
+            _onSettingsTap();
+          } else if (index < _mobileNavSidebarMap.length) {
             setState(() {
-              _selectedSidebarIndex = _mobileIndexMap[index];
+              _selectedSidebarIndex = _mobileNavSidebarMap[index];
+              _directScreenIndex = null;
               _showSettings = false;
             });
+            const names = ['communication', 'contacts', 'aprs', 'packets'];
+            DataBroker.dispatch(1, 'CurrentScreen', names[index]);
           }
         },
-        destinations: _mobileDestinations
-            .map((d) => NavigationDestination(icon: Icon(d.icon), label: d.label))
-            .toList(),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.radio), label: 'Comm'),
+          NavigationDestination(icon: Icon(Icons.person_search), label: 'Contacts'),
+          NavigationDestination(icon: Icon(Icons.location_on), label: 'APRS'),
+          NavigationDestination(icon: Icon(Icons.settings_input_antenna), label: 'Packets'),
+          NavigationDestination(icon: Icon(Icons.tune), label: 'Settings'),
+        ],
       ),
+    ),
     );
   }
 
-  Widget _buildMobileStatusBar() {
+  Widget _buildMobileHeader() {
     final colors = Theme.of(context).colorScheme;
     return Container(
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       color: colors.surfaceContainerLow,
       child: Row(
         children: [
-          Text(
-            'HTCommander-X',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: colors.primary,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _isConnected
-                  ? colors.tertiary
-                  : _isConnecting ? Colors.amber : colors.outline,
-            ),
-          ),
-          const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              _isConnected
-                  ? '${_radioName ?? "Radio"} | ${_vfoAFreq > 0 ? "${_vfoAFreq.toStringAsFixed(3)} MHz" : ""}'
-                  : _isConnecting ? 'Connecting...' : 'Disconnected',
-              style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'HTCOMMANDER-X',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: colors.primary,
+                    letterSpacing: 1,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _isConnected
+                            ? colors.tertiary
+                            : _isConnecting ? Colors.amber : colors.outline,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _isConnected
+                            ? '${_radioName ?? "Radio"} | ${_vfoAFreq > 0 ? "${_vfoAFreq.toStringAsFixed(3)} MHz" : ""}'
+                            : _isConnecting ? 'Connecting...' : 'Disconnected',
+                        style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
+          if (_isConnected) ...[
+            Icon(Icons.battery_std, size: 14, color: colors.onSurfaceVariant),
+            const SizedBox(width: 2),
+            Text(
+              '$_batteryPercent%',
+              style: TextStyle(fontSize: 10, color: colors.onSurfaceVariant),
+            ),
+            const SizedBox(width: 8),
+            SignalBars(level: _rssi, height: 12),
+            const SizedBox(width: 8),
+          ],
           GestureDetector(
             onTap: _onPowerTap,
             child: Icon(
               _isConnected ? Icons.bluetooth_disabled : Icons.bluetooth,
-              size: 16,
+              size: 18,
               color: _isConnected ? colors.error : colors.primary,
             ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _showMobileMoreMenu,
+            child: Icon(Icons.more_vert, size: 18, color: colors.onSurfaceVariant),
           ),
         ],
       ),
     );
   }
 
-  // Mobile: show 5 key items in bottom nav
-  static const _mobileIndexMap = [0, 1, 7, 5, 2]; // Comm, Contacts, APRS, Mail, Packets
-  static final _mobileDestinations = [
-    sidebarDestinations[0], // Communication
-    sidebarDestinations[1], // Contacts
-    sidebarDestinations[7], // APRS
-    sidebarDestinations[5], // Mail
-    sidebarDestinations[2], // Packets
-  ];
+  void _showMobileMoreMenu() {
+    final colors = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: colors.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 32,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: colors.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              _moreMenuItem(ctx, Icons.terminal, 'Terminal', 3),
+              _moreMenuItem(ctx, Icons.dns, 'BBS', 4),
+              _moreMenuItem(ctx, Icons.mail_outline, 'Mail', 5),
+              _moreMenuItem(ctx, Icons.download, 'Torrent', 6),
+              _moreMenuItem(ctx, Icons.book_outlined, 'Logbook', null, directScreen: 2),
+              _moreMenuItem(ctx, Icons.map_outlined, 'Map', null, directScreen: 9),
+              _moreMenuItem(ctx, Icons.bug_report_outlined, 'Debug', null, directScreen: 10),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _moreMenuItem(BuildContext ctx, IconData icon, String label,
+      int? sidebarIndex, {int? directScreen}) {
+    final colors = Theme.of(ctx).colorScheme;
+    return ListTile(
+      leading: Icon(icon, size: 20, color: colors.onSurfaceVariant),
+      title: Text(
+        label,
+        style: TextStyle(fontSize: 13, color: colors.onSurface),
+      ),
+      dense: true,
+      onTap: () {
+        Navigator.pop(ctx);
+        if (directScreen != null) {
+          setState(() {
+            _directScreenIndex = directScreen;
+            _showSettings = false;
+          });
+          DataBroker.dispatch(1, 'CurrentScreen', label.toLowerCase());
+        } else if (sidebarIndex != null) {
+          _onDestinationSelected(sidebarIndex);
+        }
+      },
+    );
+  }
+
+  // Mobile bottom nav: Comm, Contacts, APRS, Packets, Settings
+  static const _mobileNavSidebarMap = [0, 1, 7, 2]; // nav index → sidebar index
+  static const _mobileIndexMap = [0, 1, 7, 2]; // kept for selectedIndex lookup
 
 }

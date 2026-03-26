@@ -60,8 +60,8 @@ class ImagePreviewDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 520,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 520),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(

@@ -146,8 +146,8 @@ class _RadioChannelDialogState extends State<RadioChannelDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 440,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 440),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: SingleChildScrollView(
@@ -296,7 +296,9 @@ class _RadioChannelDialogState extends State<RadioChannelDialog> {
   ) {
     return Row(
       children: [
-        SizedBox(width: 140, child: _buildLabel(label, colors)),
+        ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 80, maxWidth: 140),
+            child: _buildLabel(label, colors)),
         Expanded(
           child: Container(
             height: 32,

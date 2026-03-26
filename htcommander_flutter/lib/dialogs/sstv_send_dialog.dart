@@ -126,8 +126,8 @@ class _SstvSendDialogState extends State<SstvSendDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 480,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 480),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(

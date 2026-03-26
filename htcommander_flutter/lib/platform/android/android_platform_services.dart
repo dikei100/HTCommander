@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../../core/data_broker.dart';
 import '../../platform/audio_service.dart';
 import '../../platform/bluetooth_service.dart';
 import 'android_audio_service.dart';
@@ -21,6 +22,16 @@ const List<String> targetDeviceNames = [
 /// Android platform services using Bluetooth Classic RFCOMM via MethodChannel.
 class AndroidPlatformServices extends PlatformServices {
   static const _btChannel = MethodChannel('com.htcommander/bluetooth');
+
+  AndroidPlatformServices() {
+    // Listen for permission denial callbacks from Kotlin MainActivity.
+    _btChannel.setMethodCallHandler((call) async {
+      if (call.method == 'permissionsDenied') {
+        final denied = (call.arguments as List?)?.cast<String>() ?? [];
+        DataBroker.dispatch(1, 'PermissionsDenied', denied, store: false);
+      }
+    });
+  }
 
   @override
   RadioBluetoothTransport createRadioBluetooth(String macAddress) {
@@ -54,7 +65,8 @@ class AndroidPlatformServices extends PlatformServices {
         final mac = map['mac'] as String? ?? '';
 
         if (!targetDeviceNames.contains(name)) continue;
-        final normalized = mac.replaceAll(':', '').toUpperCase();
+        final normalized =
+            mac.replaceAll(':', '').replaceAll('-', '').toUpperCase();
         if (seenMacs.contains(normalized)) continue;
         seenMacs.add(normalized);
 

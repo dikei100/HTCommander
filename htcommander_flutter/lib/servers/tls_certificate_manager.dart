@@ -15,6 +15,7 @@ class TlsCertificateManager {
   /// Returns a SecurityContext with a valid self-signed certificate.
   /// Creates a new certificate if none exists or the existing one is invalid.
   static Future<SecurityContext?> getOrCreateContext(String configDir) async {
+    if (Platform.isAndroid || Platform.isIOS) return null;
     if (_cachedContext != null) return _cachedContext;
 
     final certPath = '$configDir/htcommander-tls.pem';
@@ -78,7 +79,7 @@ class TlsCertificateManager {
       }
 
       // Set restrictive file permissions on Linux/macOS
-      if (!Platform.isWindows) {
+      if (Platform.isLinux || Platform.isMacOS) {
         try {
           await Process.run('chmod', ['600', certPath]);
         } catch (_) {}

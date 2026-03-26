@@ -409,7 +409,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       child: Container(
         width: double.infinity,
         decoration: BoxDecoration(
-          color: const Color(0xFF0A0D14),
+          color: colors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(8),
         ),
         child: _entries.isEmpty

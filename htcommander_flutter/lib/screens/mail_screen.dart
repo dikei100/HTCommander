@@ -76,29 +76,83 @@ class _MailScreenState extends State<MailScreen> {
     super.dispose();
   }
 
+  Widget _buildMobileFolderBar(ColorScheme colors) {
+    return Container(
+      height: 44,
+      color: colors.surfaceContainerLow,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          children: _folders.map((folder) {
+            final isSelected = folder == _selectedFolder;
+            final count = _folderCount(folder);
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: FilterChip(
+                selected: isSelected,
+                showCheckmark: false,
+                avatar: Icon(
+                  _folderIcons[folder],
+                  size: 14,
+                  color: isSelected ? colors.primary : colors.onSurfaceVariant,
+                ),
+                label: Text(
+                  count > 0 ? '$folder ($count)' : folder,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+                onSelected: (_) => setState(() {
+                  _selectedFolder = folder;
+                  _selectedMailIndex = -1;
+                }),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final isWide = MediaQuery.sizeOf(context).width > 800;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Folder sidebar
-        SizedBox(
-          width: 180,
-          child: _buildFolderSidebar(colors),
-        ),
-        // Mail content area
-        Expanded(
-          child: Column(
-            children: [
-              // Action bar
-              _buildActionBar(colors),
-              // Content
-              Expanded(child: _buildMailContent(colors)),
-            ],
+    if (isWide) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Folder sidebar
+          SizedBox(
+            width: 180,
+            child: _buildFolderSidebar(colors),
           ),
-        ),
+          // Mail content area
+          Expanded(
+            child: Column(
+              children: [
+                // Action bar
+                _buildActionBar(colors),
+                // Content
+                Expanded(child: _buildMailContent(colors)),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Mobile: folder chips on top, then action bar, then content
+    return Column(
+      children: [
+        _buildMobileFolderBar(colors),
+        _buildActionBar(colors),
+        Expanded(child: _buildMailContent(colors)),
       ],
     );
   }

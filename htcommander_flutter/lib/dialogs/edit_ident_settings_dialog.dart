@@ -86,8 +86,8 @@ class _EditIdentSettingsDialogState extends State<EditIdentSettingsDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 340,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 340),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(

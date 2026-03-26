@@ -131,255 +131,268 @@ class _ContactsScreenState extends State<ContactsScreen> {
     super.dispose();
   }
 
+  Widget _buildRosterColumn(ColorScheme colors, List<ContactEntry> filtered, int activeCount) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Title row with badge and actions
+        Row(
+          children: [
+            Text(
+              'STATION ROSTER',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
+                color: colors.onSurface,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: colors.primary.withAlpha(30),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '$activeCount ACTIVE',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.0,
+                  color: colors.primary,
+                ),
+              ),
+            ),
+            const Spacer(),
+            _ActionButton(
+              icon: Icons.add_rounded,
+              label: 'Add',
+              onPressed: _addContact,
+              colors: colors,
+            ),
+            const SizedBox(width: 6),
+            _ActionButton(
+              icon: Icons.delete_outline_rounded,
+              label: 'Remove',
+              onPressed:
+                  _selectedIndex != null ? _removeContact : null,
+              colors: colors,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        // Search bar
+        GlassCard(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded,
+                  size: 16, color: colors.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colors.onSurface,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Search callsign, name, type...',
+                    hintStyle: TextStyle(
+                      fontSize: 12,
+                      color: colors.onSurfaceVariant.withAlpha(120),
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+              if (_searchQuery.isNotEmpty)
+                GestureDetector(
+                  onTap: () => _searchController.clear(),
+                  child: Icon(Icons.close_rounded,
+                      size: 14, color: colors.onSurfaceVariant),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        // Contact table
+        Expanded(
+          child: GlassCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                // Table header
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerHigh.withAlpha(60),
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(8)),
+                  ),
+                  child: Row(
+                    children: [
+                      _tableHeader('CALLSIGN', flex: 2, colors: colors),
+                      _tableHeader('SNR', flex: 1, colors: colors),
+                      _tableHeader('LAST HEARD',
+                          flex: 2, colors: colors),
+                      _tableHeader('STATUS', flex: 1, colors: colors),
+                    ],
+                  ),
+                ),
+                // Table body
+                Expanded(
+                  child: filtered.isEmpty
+                      ? Center(
+                          child: Text(
+                            _searchQuery.isNotEmpty
+                                ? 'No matching stations'
+                                : 'No stations in roster',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colors.outline,
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (context, i) {
+                            final c = filtered[i];
+                            final realIndex =
+                                _contacts.indexOf(c);
+                            final isSelected =
+                                _selectedIndex == realIndex;
+                            final isOnline =
+                                c.callsign.isNotEmpty;
+
+                            return GestureDetector(
+                              onTap: () {
+                                setState(
+                                    () => _selectedIndex = realIndex);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 9),
+                                margin: const EdgeInsets.only(
+                                    top: 1),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? colors.primary.withAlpha(25)
+                                      : Colors.transparent,
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Callsign
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        c.callsign.isNotEmpty
+                                            ? c.callsign
+                                            : '--',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: isSelected
+                                              ? colors.primary
+                                              : colors.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                    // SNR (derived from type field)
+                                    Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        c.type.isNotEmpty
+                                            ? c.type
+                                            : '--',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: colors.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                    // Last heard (derived from description)
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        c.description.isNotEmpty
+                                            ? c.description
+                                            : '--',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color:
+                                              colors.onSurfaceVariant,
+                                        ),
+                                        overflow:
+                                            TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    // Status badge
+                                    Expanded(
+                                      flex: 1,
+                                      child: Align(
+                                        alignment:
+                                            Alignment.centerLeft,
+                                        child: _StatusBadge(
+                                            isOnline: isOnline),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final filtered = _filteredContacts;
     final activeCount =
         _contacts.where((c) => c.callsign.isNotEmpty).length;
+    final isWide = MediaQuery.sizeOf(context).width > 800;
 
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Left panel: roster list
-          Expanded(
-            flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Title row with badge and actions
-                Row(
-                  children: [
-                    Text(
-                      'STATION ROSTER',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                        color: colors.onSurface,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: colors.primary.withAlpha(30),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        '$activeCount ACTIVE',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.0,
-                          color: colors.primary,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    _ActionButton(
-                      icon: Icons.add_rounded,
-                      label: 'Add',
-                      onPressed: _addContact,
-                      colors: colors,
-                    ),
-                    const SizedBox(width: 6),
-                    _ActionButton(
-                      icon: Icons.delete_outline_rounded,
-                      label: 'Remove',
-                      onPressed:
-                          _selectedIndex != null ? _removeContact : null,
-                      colors: colors,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                // Search bar
-                GlassCard(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                  child: Row(
-                    children: [
-                      Icon(Icons.search_rounded,
-                          size: 16, color: colors.onSurfaceVariant),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colors.onSurface,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Search callsign, name, type...',
-                            hintStyle: TextStyle(
-                              fontSize: 12,
-                              color: colors.onSurfaceVariant.withAlpha(120),
-                            ),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                        ),
-                      ),
-                      if (_searchQuery.isNotEmpty)
-                        GestureDetector(
-                          onTap: () => _searchController.clear(),
-                          child: Icon(Icons.close_rounded,
-                              size: 14, color: colors.onSurfaceVariant),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                // Contact table
-                Expanded(
-                  child: GlassCard(
-                    padding: EdgeInsets.zero,
-                    child: Column(
-                      children: [
-                        // Table header
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: colors.surfaceContainerHigh.withAlpha(60),
-                            borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(8)),
-                          ),
-                          child: Row(
-                            children: [
-                              _tableHeader('CALLSIGN', flex: 2, colors: colors),
-                              _tableHeader('SNR', flex: 1, colors: colors),
-                              _tableHeader('LAST HEARD',
-                                  flex: 2, colors: colors),
-                              _tableHeader('STATUS', flex: 1, colors: colors),
-                            ],
-                          ),
-                        ),
-                        // Table body
-                        Expanded(
-                          child: filtered.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    _searchQuery.isNotEmpty
-                                        ? 'No matching stations'
-                                        : 'No stations in roster',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: colors.outline,
-                                    ),
-                                  ),
-                                )
-                              : ListView.builder(
-                                  itemCount: filtered.length,
-                                  itemBuilder: (context, i) {
-                                    final c = filtered[i];
-                                    final realIndex =
-                                        _contacts.indexOf(c);
-                                    final isSelected =
-                                        _selectedIndex == realIndex;
-                                    final isOnline =
-                                        c.callsign.isNotEmpty;
-
-                                    return GestureDetector(
-                                      onTap: () {
-                                        setState(
-                                            () => _selectedIndex = realIndex);
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 14, vertical: 9),
-                                        margin: const EdgeInsets.only(
-                                            top: 1),
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? colors.primary.withAlpha(25)
-                                              : Colors.transparent,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            // Callsign
-                                            Expanded(
-                                              flex: 2,
-                                              child: Text(
-                                                c.callsign.isNotEmpty
-                                                    ? c.callsign
-                                                    : '--',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isSelected
-                                                      ? colors.primary
-                                                      : colors.onSurface,
-                                                ),
-                                              ),
-                                            ),
-                                            // SNR (derived from type field)
-                                            Expanded(
-                                              flex: 1,
-                                              child: Text(
-                                                c.type.isNotEmpty
-                                                    ? c.type
-                                                    : '--',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: colors.onSurface,
-                                                ),
-                                              ),
-                                            ),
-                                            // Last heard (derived from description)
-                                            Expanded(
-                                              flex: 2,
-                                              child: Text(
-                                                c.description.isNotEmpty
-                                                    ? c.description
-                                                    : '--',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color:
-                                                      colors.onSurfaceVariant,
-                                                ),
-                                                overflow:
-                                                    TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            // Status badge
-                                            Expanded(
-                                              flex: 1,
-                                              child: Align(
-                                                alignment:
-                                                    Alignment.centerLeft,
-                                                child: _StatusBadge(
-                                                    isOnline: isOnline),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+    if (isWide) {
+      return Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left panel: roster list
+            Expanded(
+              flex: 3,
+              child: _buildRosterColumn(colors, filtered, activeCount),
             ),
-          ),
-          const SizedBox(width: 14),
-          // Right panel: detail
-          SizedBox(
-            width: 300,
-            child: _buildDetailPanel(colors),
-          ),
-        ],
-      ),
+            const SizedBox(width: 14),
+            // Right panel: detail
+            SizedBox(
+              width: 300,
+              child: _buildDetailPanel(colors),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Mobile: just the roster column, full width
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: _buildRosterColumn(colors, filtered, activeCount),
     );
   }
 
@@ -622,12 +635,12 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final label = isOnline ? 'Online' : 'Offline';
     final bgColor = isOnline
-        ? const Color(0xFFB5FFC2).withAlpha(30)
-        : const Color(0xFFEE7D77).withAlpha(30);
-    final textColor =
-        isOnline ? const Color(0xFFB5FFC2) : const Color(0xFFEE7D77);
+        ? colors.tertiary.withAlpha(30)
+        : colors.error.withAlpha(30);
+    final textColor = isOnline ? colors.tertiary : colors.error;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),

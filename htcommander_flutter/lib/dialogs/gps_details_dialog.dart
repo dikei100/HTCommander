@@ -12,8 +12,8 @@ class GpsDetailsDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 380,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 380),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -27,7 +27,7 @@ class GpsDetailsDialog extends StatelessWidget {
               ...details.entries.map((e) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(children: [
-                  SizedBox(width: 120, child: Text(e.key,
+                  ConstrainedBox(constraints: const BoxConstraints(minWidth: 70, maxWidth: 120), child: Text(e.key,
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600,
                           color: colors.onSurfaceVariant))),
                   Expanded(child: SelectableText(e.value,

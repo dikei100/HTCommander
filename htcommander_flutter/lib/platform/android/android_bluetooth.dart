@@ -25,7 +25,7 @@ class AndroidRadioBluetooth extends RadioBluetoothTransport {
   // GAIA frame accumulator — mirrors the Linux isolate's decode loop.
   // Raw socket bytes may arrive in chunks that don't align with GAIA frame
   // boundaries, so we accumulate and decode incrementally.
-  final _accumulator = Uint8List(8192);
+  final _accumulator = Uint8List(4096);
   int _accPtr = 0;
   int _accLen = 0;
 
@@ -71,6 +71,10 @@ class AndroidRadioBluetooth extends RadioBluetoothTransport {
   @override
   void disconnect() {
     _connected = false;
+    // Stop foreground service when disconnecting
+    _methodChannel
+        .invokeMethod<void>('stopForegroundService')
+        .catchError((_) {});
     _methodChannel.invokeMethod<void>('disconnect').catchError((_) {});
     // Delay cleanup to let Kotlin close the socket cleanly,
     // matching the Linux isolate's 1-second delay pattern.
@@ -94,6 +98,10 @@ class AndroidRadioBluetooth extends RadioBluetoothTransport {
     switch (type) {
       case 'connected':
         _connected = true;
+        // Start foreground service to keep BT alive in background
+        _methodChannel
+            .invokeMethod<void>('startForegroundService')
+            .catchError((_) {});
         onConnected?.call();
       case 'data':
         final raw = map['payload'] as Uint8List;
@@ -118,14 +126,19 @@ class AndroidRadioBluetooth extends RadioBluetoothTransport {
   /// Accumulates raw socket bytes and decodes GAIA frames, matching the
   /// Linux isolate's frame reassembly logic.
   void _decodeGaiaFrames(Uint8List raw) {
-    // Compact accumulator if pointer has advanced past half
-    if (_accPtr > 4096) {
+    // Compact accumulator when pointer has advanced past half
+    if (_accPtr > 2048) {
       _accumulator.setRange(0, _accLen, _accumulator, _accPtr);
       _accPtr = 0;
     }
 
-    // Append new data
-    final space = _accumulator.length - (_accPtr + _accLen);
+    // Append new data — reset accumulator if space is exhausted
+    int space = _accumulator.length - (_accPtr + _accLen);
+    if (space <= 0) {
+      _accPtr = 0;
+      _accLen = 0;
+      space = _accumulator.length;
+    }
     final toCopy = raw.length <= space ? raw.length : space;
     _accumulator.setRange(_accPtr + _accLen, _accPtr + _accLen + toCopy, raw);
     _accLen += toCopy;

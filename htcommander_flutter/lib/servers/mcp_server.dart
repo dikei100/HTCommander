@@ -1123,7 +1123,14 @@ class McpServer {
     }
 
     try {
-      final pcm = DtmfEngine.generateDtmfPcm(digits);
+      final pcm8bit = DtmfEngine.generateDtmfPcm(digits);
+      // Convert 8-bit unsigned PCM to 16-bit signed PCM
+      final pcm = Uint8List(pcm8bit.length * 2);
+      for (int i = 0; i < pcm8bit.length; i++) {
+        final int sample16 = ((pcm8bit[i] - 128) * 256);
+        pcm[i * 2] = sample16 & 0xFF;
+        pcm[i * 2 + 1] = (sample16 >> 8) & 0xFF;
+      }
       _broker.dispatch(deviceId, 'TransmitVoicePCM', pcm, store: false);
       return _toolResult('DTMF sent: $digits');
     } catch (e) {

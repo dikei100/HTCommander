@@ -46,8 +46,8 @@ class _ComposeMailDialogState extends State<ComposeMailDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 440,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 440),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(

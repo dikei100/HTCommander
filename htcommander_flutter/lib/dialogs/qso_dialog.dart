@@ -122,8 +122,8 @@ class _QsoDialogState extends State<QsoDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 420,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 420),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: SingleChildScrollView(

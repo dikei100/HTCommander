@@ -93,7 +93,7 @@ class _DebugScreenState extends State<DebugScreen> {
 
   Widget _buildHeader(ColorScheme colors) {
     return Container(
-      height: 46,
+      height: 42,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       color: colors.surfaceContainer,
       child: Row(

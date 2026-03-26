@@ -102,8 +102,8 @@ class _ChannelEditorDialogState extends State<ChannelEditorDialog> {
     return Dialog(
       backgroundColor: colors.surfaceContainerHigh,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: SizedBox(
-        width: 400,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 400),
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -295,8 +295,8 @@ class _ChannelEditorDialogState extends State<ChannelEditorDialog> {
   ) {
     return Row(
       children: [
-        SizedBox(
-          width: 140,
+        ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 80, maxWidth: 140),
           child: Text(
             label,
             style: TextStyle(
